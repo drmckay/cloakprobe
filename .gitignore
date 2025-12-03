@@ -1,0 +1,27 @@
+# Rust build directory
+/target/
+
+# IDE/Editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Downloaded/generated data files
+/data/*
+!/data/.gitkeep
+
+# Backup files
+*.bak
+*.backup
+

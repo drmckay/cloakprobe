@@ -1,0 +1,38 @@
+[Unit]
+Description=CloakProbe - Privacy-first IP information service
+Documentation=https://github.com/drmckay/cloakprobe
+After=network.target
+
+[Service]
+Type=simple
+User=cloakprobe
+Group=cloakprobe
+WorkingDirectory=/opt/cloakprobe
+ExecStart=/opt/cloakprobe/cloakprobe
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cloakprobe
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/cloakprobe/data
+ReadOnlyPaths=/opt/cloakprobe
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=512M
+
+# Environment variables
+Environment="CLOAKPROBE_PRIVACY_MODE=strict"
+Environment="CLOAKPROBE_ASN_DB_PATH=/opt/cloakprobe/data/asn_db.bin"
+Environment="CLOAKPROBE_RIPE_DB_PATH=/opt/cloakprobe/data/ripe_db.bin"
+Environment="PORT=8080"
+
+[Install]
+WantedBy=multi-user.target
+

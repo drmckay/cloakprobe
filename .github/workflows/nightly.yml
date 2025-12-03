@@ -1,0 +1,265 @@
+name: Nightly Release
+
+on:
+  schedule:
+    # Run at 04:00 UTC every day
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+    # Allow manual trigger
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: false
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-cargo-
+
+      - name: Build (native)
+        if: ${{ !matrix.cross }}
+        run: |
+          cargo build --release --target ${{ matrix.target }}
+          cargo build --release --target ${{ matrix.target }} --bin asn_builder
+          cargo build --release --target ${{ matrix.target }} --bin ripe_builder
+
+      - name: Build (cross)
+        if: matrix.cross
+        run: |
+          cross build --release --target ${{ matrix.target }}
+          cross build --release --target ${{ matrix.target }} --bin asn_builder
+          cross build --release --target ${{ matrix.target }} --bin ripe_builder
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.target }}
+          path: |
+            target/${{ matrix.target }}/release/cloakprobe
+            target/${{ matrix.target }}/release/asn_builder
+            target/${{ matrix.target }}/release/ripe_builder
+
+  build-databases:
+    name: Build Databases
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-db-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-db-
+
+      - name: Build database builders
+        run: |
+          cargo build --release --bin asn_builder
+          cargo build --release --bin ripe_builder
+
+      - name: Download ip2asn database
+        run: |
+          mkdir -p data
+          curl -sSfL "https://iptoasn.com/data/ip2asn-combined.tsv.gz" -o data/ip2asn-combined.tsv.gz
+          gunzip -c data/ip2asn-combined.tsv.gz > data/ip2asn-combined.tsv
+
+      - name: Download RIPE database
+        run: |
+          curl -sSfL "ftp://ftp.ripe.net/ripe/dbase/split/ripe.db.aut-num.gz" -o data/ripe.db.aut-num.gz
+          curl -sSfL "ftp://ftp.ripe.net/ripe/dbase/split/ripe.db.organisation.gz" -o data/ripe.db.organisation.gz
+          gunzip -c data/ripe.db.aut-num.gz > data/ripe.db.aut-num.txt
+          gunzip -c data/ripe.db.organisation.gz > data/ripe.db.organisation.txt
+
+      - name: Build ASN database
+        run: ./target/release/asn_builder data/ip2asn-combined.tsv data/asn_db.bin
+
+      - name: Build RIPE database
+        run: ./target/release/ripe_builder data/ripe.db.aut-num.txt data/ripe.db.organisation.txt data/ripe_db.bin
+
+      - name: Upload databases
+        uses: actions/upload-artifact@v4
+        with:
+          name: databases
+          path: |
+            data/asn_db.bin
+            data/ripe_db.bin
+
+  package:
+    name: Package ${{ matrix.target }}
+    needs: [build, build-databases]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - aarch64-unknown-linux-gnu
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: binaries-${{ matrix.target }}
+          path: binaries
+
+      - name: Download databases
+        uses: actions/download-artifact@v4
+        with:
+          name: databases
+          path: databases
+
+      - name: Create package
+        run: |
+          PACKAGE_DIR="cloakprobe-${{ matrix.target }}"
+          mkdir -p "${PACKAGE_DIR}/data"
+          mkdir -p "${PACKAGE_DIR}/scripts"
+          mkdir -p "${PACKAGE_DIR}/systemd"
+          
+          # Copy binaries
+          cp binaries/cloakprobe "${PACKAGE_DIR}/"
+          cp binaries/asn_builder "${PACKAGE_DIR}/"
+          cp binaries/ripe_builder "${PACKAGE_DIR}/"
+          chmod +x "${PACKAGE_DIR}/cloakprobe"
+          chmod +x "${PACKAGE_DIR}/asn_builder"
+          chmod +x "${PACKAGE_DIR}/ripe_builder"
+          
+          # Copy databases
+          cp databases/asn_db.bin "${PACKAGE_DIR}/data/"
+          cp databases/ripe_db.bin "${PACKAGE_DIR}/data/"
+          
+          # Copy scripts
+          cp scripts/update_asn_db.sh "${PACKAGE_DIR}/scripts/"
+          cp scripts/update_ripe_db.sh "${PACKAGE_DIR}/scripts/"
+          chmod +x "${PACKAGE_DIR}/scripts/"*.sh
+          
+          # Copy systemd service
+          cp systemd/cloakprobe.service "${PACKAGE_DIR}/systemd/"
+          
+          # Copy README
+          cp README.md "${PACKAGE_DIR}/"
+          
+          # Create tarball
+          tar -czvf "cloakprobe-${{ matrix.target }}.tar.gz" "${PACKAGE_DIR}"
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.target }}
+          path: cloakprobe-${{ matrix.target }}.tar.gz
+
+  release:
+    name: Create Nightly Release
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download x86_64 package
+        uses: actions/download-artifact@v4
+        with:
+          name: package-x86_64-unknown-linux-gnu
+          path: packages
+
+      - name: Download aarch64 package
+        uses: actions/download-artifact@v4
+        with:
+          name: package-aarch64-unknown-linux-gnu
+          path: packages
+
+      - name: Get current date
+        id: date
+        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+
+      - name: Delete previous nightly release
+        uses: dev-drprasad/delete-tag-and-release@v1.1
+        with:
+          tag_name: nightly
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          delete_release: true
+        continue-on-error: true
+
+      - name: Create nightly release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          name: "Nightly Build (${{ steps.date.outputs.date }})"
+          body: |
+            ## Nightly Build - ${{ steps.date.outputs.date }}
+            
+            This is an automated nightly build containing the latest code and updated databases.
+            
+            ### Contents
+            
+            Each package includes:
+            - `cloakprobe` - Main binary
+            - `asn_builder` - ASN database builder
+            - `ripe_builder` - RIPE organization database builder
+            - `data/asn_db.bin` - Pre-built ASN database (from iptoasn.com)
+            - `data/ripe_db.bin` - Pre-built RIPE organization database
+            - `scripts/` - Database update scripts
+            - `systemd/` - Systemd service file
+            
+            ### Installation
+            
+            ```bash
+            # Download and extract
+            tar -xzf cloakprobe-x86_64-unknown-linux-gnu.tar.gz
+            cd cloakprobe-x86_64-unknown-linux-gnu
+            
+            # Run
+            ./cloakprobe
+            ```
+            
+            For full installation instructions, see the README.
+            
+            ---
+            ⚠️ **Note**: This is a pre-release build. Use at your own risk.
+          prerelease: true
+          files: |
+            packages/cloakprobe-x86_64-unknown-linux-gnu.tar.gz
+            packages/cloakprobe-aarch64-unknown-linux-gnu.tar.gz
+

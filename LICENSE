@@ -1,0 +1,36 @@
+GNU AFFERO GENERAL PUBLIC LICENSE
+Version 3, 19 November 2007
+
+Copyright (C) 2024 CloakProbe Contributors
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+---
+
+ADDITIONAL COMMERCIAL USE RESTRICTIONS
+
+Notwithstanding the above, this software may NOT be used for commercial purposes
+without explicit written permission from the copyright holders. Commercial use
+includes, but is not limited to:
+
+- Use in commercial products or services
+- Use by for-profit organizations
+- Use in SaaS (Software as a Service) offerings
+- Use in any revenue-generating activity
+
+For commercial licensing inquiries, please contact the project maintainers.
+
+Non-commercial use (personal, educational, research, non-profit organizations)
+is permitted under the terms of the AGPL-3.0 license above.
+
