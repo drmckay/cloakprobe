@@ -99,8 +99,12 @@ fn parse_aut_num(content: &str) -> HashMap<u32, AutNumInfo> {
             if line.starts_with("org:") {
                 current_org_id = Some(line.strip_prefix("org:").unwrap_or("").trim().to_string());
             } else if line.starts_with("as-name:") {
-                current_as_name =
-                    Some(line.strip_prefix("as-name:").unwrap_or("").trim().to_string());
+                current_as_name = Some(
+                    line.strip_prefix("as-name:")
+                        .unwrap_or("")
+                        .trim()
+                        .to_string(),
+                );
             }
         }
     }
