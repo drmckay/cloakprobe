@@ -102,13 +102,46 @@ jobs:
       - name: Download ip2asn database
         run: |
           mkdir -p data
-          curl -sSfL "https://iptoasn.com/data/ip2asn-combined.tsv.gz" -o data/ip2asn-combined.tsv.gz
+          for i in 1 2 3 4 5; do
+            echo "Attempt $i: Downloading ip2asn database..."
+            if curl -sSfL --connect-timeout 30 --max-time 120 \
+              "https://iptoasn.com/data/ip2asn-combined.tsv.gz" \
+              -o data/ip2asn-combined.tsv.gz; then
+              echo "Download successful"
+              break
+            fi
+            if [ $i -eq 5 ]; then
+              echo "Failed to download after 5 attempts"
+              exit 1
+            fi
+            echo "Download failed, retrying in $((2**i)) seconds..."
+            sleep $((2**i))
+          done
           gunzip -c data/ip2asn-combined.tsv.gz > data/ip2asn-combined.tsv
 
       - name: Download RIPE database
         run: |
-          curl -sSfL "ftp://ftp.ripe.net/ripe/dbase/split/ripe.db.aut-num.gz" -o data/ripe.db.aut-num.gz
-          curl -sSfL "ftp://ftp.ripe.net/ripe/dbase/split/ripe.db.organisation.gz" -o data/ripe.db.organisation.gz
+          download_with_retry() {
+            local url="$1"
+            local output="$2"
+            for i in 1 2 3 4 5; do
+              echo "Attempt $i: Downloading $(basename $output)..."
+              if curl -sSfL --connect-timeout 30 --max-time 300 "$url" -o "$output"; then
+                echo "Download successful"
+                return 0
+              fi
+              if [ $i -eq 5 ]; then
+                echo "Failed to download $url after 5 attempts"
+                return 1
+              fi
+              echo "Download failed, retrying in $((2**i)) seconds..."
+              sleep $((2**i))
+            done
+          }
+          
+          download_with_retry "ftp://ftp.ripe.net/ripe/dbase/split/ripe.db.aut-num.gz" data/ripe.db.aut-num.gz
+          download_with_retry "ftp://ftp.ripe.net/ripe/dbase/split/ripe.db.organisation.gz" data/ripe.db.organisation.gz
+          
           gunzip -c data/ripe.db.aut-num.gz > data/ripe.db.aut-num.txt
           gunzip -c data/ripe.db.organisation.gz > data/ripe.db.organisation.txt
 
