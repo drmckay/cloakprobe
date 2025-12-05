@@ -61,7 +61,6 @@ fn sanitize_for_json(value: Option<String>) -> Option<String> {
     })
 }
 
-
 pub async fn info_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -264,7 +263,14 @@ pub async fn info_handler(
     }
 
     let mut connection_headers = CloudflareConnectionHeaders::default();
-    if cf_visitor.is_some() || x_forwarded_proto.is_some() || x_cf_http_protocol.is_some() || x_cf_tls_version.is_some() || x_cf_tls_cipher.is_some() || cf_request_id.is_some() || cf_cache_status.is_some() {
+    if cf_visitor.is_some()
+        || x_forwarded_proto.is_some()
+        || x_cf_http_protocol.is_some()
+        || x_cf_tls_version.is_some()
+        || x_cf_tls_cipher.is_some()
+        || cf_request_id.is_some()
+        || cf_cache_status.is_some()
+    {
         connection_headers.cf_visitor = sanitize_for_json(cf_visitor);
         connection_headers.x_forwarded_proto = sanitize_for_json(x_forwarded_proto);
         connection_headers.http_protocol = sanitize_for_json(x_cf_http_protocol);
@@ -294,11 +300,31 @@ pub async fn info_handler(
         || proxy.x_forwarded_for.is_some()
     {
         Some(CloudflareHeaders {
-            geo: if geo.cf_ipcountry.is_some() { Some(geo) } else { None },
-            network: if network_headers.asn.is_some() { Some(network_headers) } else { None },
-            connection: if connection_headers.cf_visitor.is_some() { Some(connection_headers) } else { None },
-            security: if security.trust_score.is_some() { Some(security) } else { None },
-            proxy: if proxy.x_forwarded_for.is_some() { Some(proxy) } else { None },
+            geo: if geo.cf_ipcountry.is_some() {
+                Some(geo)
+            } else {
+                None
+            },
+            network: if network_headers.asn.is_some() {
+                Some(network_headers)
+            } else {
+                None
+            },
+            connection: if connection_headers.cf_visitor.is_some() {
+                Some(connection_headers)
+            } else {
+                None
+            },
+            security: if security.trust_score.is_some() {
+                Some(security)
+            } else {
+                None
+            },
+            proxy: if proxy.x_forwarded_for.is_some() {
+                Some(proxy)
+            } else {
+                None
+            },
         })
     } else {
         None
@@ -604,7 +630,7 @@ pub async fn html_handler(State(state): State<AppState>, headers: HeaderMap) -> 
 
     // Build template context with sanitized header values
     let mut context = Context::new();
-    
+
     // IP information
     context.insert("ip", &sanitize_header(Some(ip_display)));
     context.insert("ip_version", &ip_version);
@@ -615,8 +641,17 @@ pub async fn html_handler(State(state): State<AppState>, headers: HeaderMap) -> 
     context.insert("ip_numeric", &ip_numeric);
 
     // Network information
-    context.insert("asn", &network.asn.map(|a| format!("AS{}", a)).unwrap_or_else(|| "—".to_string()));
-    context.insert("as_name", &network.as_name.as_ref().unwrap_or(&"—".to_string()));
+    context.insert(
+        "asn",
+        &network
+            .asn
+            .map(|a| format!("AS{}", a))
+            .unwrap_or_else(|| "—".to_string()),
+    );
+    context.insert(
+        "as_name",
+        &network.as_name.as_ref().unwrap_or(&"—".to_string()),
+    );
     context.insert("prefix", &network.prefix.as_deref().unwrap_or("—"));
     context.insert("rir", &network.rir.as_ref().unwrap_or(&"—".to_string()));
     context.insert("country", &network.country.as_deref().unwrap_or("—"));
@@ -634,7 +669,7 @@ pub async fn html_handler(State(state): State<AppState>, headers: HeaderMap) -> 
                 .map(|v| sanitize_header(Some(v.clone())))
         })
         .unwrap_or_else(|| "—".to_string());
-    
+
     let http_protocol_display = x_cf_http_protocol
         .as_deref()
         .filter(|v| *v != "—" && !v.is_empty())
@@ -646,19 +681,35 @@ pub async fn html_handler(State(state): State<AppState>, headers: HeaderMap) -> 
                 .map(|v| sanitize_header(Some(v.clone())))
         })
         .unwrap_or_else(|| "—".to_string());
-    
+
     context.insert("tls_version", &tls_version_display);
     context.insert("http_protocol", &http_protocol_display);
     context.insert("tls_cipher", &sanitize_header(x_cf_tls_cipher.clone()));
-    context.insert("cf_ray", &connection.as_ref().and_then(|c| c.cf_ray.as_ref()).map(|v| sanitize_header(Some(v.clone()))).unwrap_or_else(|| "—".to_string()));
-    context.insert("datacenter", &connection.as_ref().and_then(|c| c.datacenter.as_ref()).map(|v| sanitize_header(Some(v.clone()))).unwrap_or_else(|| "—".to_string()));
+    context.insert(
+        "cf_ray",
+        &connection
+            .as_ref()
+            .and_then(|c| c.cf_ray.as_ref())
+            .map(|v| sanitize_header(Some(v.clone())))
+            .unwrap_or_else(|| "—".to_string()),
+    );
+    context.insert(
+        "datacenter",
+        &connection
+            .as_ref()
+            .and_then(|c| c.datacenter.as_ref())
+            .map(|v| sanitize_header(Some(v.clone())))
+            .unwrap_or_else(|| "—".to_string()),
+    );
     // Only include CF-Request-ID and CF-Cache-Status if they have non-empty values
-    context.insert("cf_request_id", &sanitize_header(
-        cf_request_id.filter(|s| !s.is_empty())
-    ));
-    context.insert("cf_cache_status", &sanitize_header(
-        cf_cache_status.filter(|s| !s.is_empty())
-    ));
+    context.insert(
+        "cf_request_id",
+        &sanitize_header(cf_request_id.filter(|s| !s.is_empty())),
+    );
+    context.insert(
+        "cf_cache_status",
+        &sanitize_header(cf_cache_status.filter(|s| !s.is_empty())),
+    );
 
     // Build Cloudflare Headers sections with sanitized values
     #[derive(serde::Serialize)]
@@ -822,10 +873,22 @@ pub async fn html_handler(State(state): State<AppState>, headers: HeaderMap) -> 
 
     // Client information
     context.insert("user_agent", &sanitize_header(client.user_agent.clone()));
-    context.insert("accept_language", &sanitize_header(client.accept_language.clone()));
-    context.insert("accept_encoding", &sanitize_header(client.accept_encoding.clone()));
-    context.insert("sec_ch_ua", &sanitize_header(client.client_hints.sec_ch_ua.clone()));
-    context.insert("sec_ch_ua_platform", &sanitize_header(client.client_hints.sec_ch_ua_platform.clone()));
+    context.insert(
+        "accept_language",
+        &sanitize_header(client.accept_language.clone()),
+    );
+    context.insert(
+        "accept_encoding",
+        &sanitize_header(client.accept_encoding.clone()),
+    );
+    context.insert(
+        "sec_ch_ua",
+        &sanitize_header(client.client_hints.sec_ch_ua.clone()),
+    );
+    context.insert(
+        "sec_ch_ua_platform",
+        &sanitize_header(client.client_hints.sec_ch_ua_platform.clone()),
+    );
 
     // Server information
     context.insert("timestamp", &server.timestamp_utc);
@@ -1164,7 +1227,10 @@ pub async fn plain_handler(
     if let Some(sec_ch_ua) = headers.get("Sec-CH-UA").and_then(|v| v.to_str().ok()) {
         writeln!(&mut out, "Sec-CH-UA: {}", sec_ch_ua).ok();
     }
-    if let Some(sec_ch_ua_platform) = headers.get("Sec-CH-UA-Platform").and_then(|v| v.to_str().ok()) {
+    if let Some(sec_ch_ua_platform) = headers
+        .get("Sec-CH-UA-Platform")
+        .and_then(|v| v.to_str().ok())
+    {
         writeln!(&mut out, "Sec-CH-UA-Platform: {}", sec_ch_ua_platform).ok();
     }
 
