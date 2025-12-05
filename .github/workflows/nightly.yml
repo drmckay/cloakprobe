@@ -317,7 +317,7 @@ jobs:
             ---
             ⚠️ **Note**: This is a pre-release build. Use at your own risk.
           prerelease: true
-          overwrite: true
+          overwrite_files: true
           files: |
             packages/cloakprobe-x86_64-unknown-linux-gnu.tar.gz
             packages/cloakprobe-aarch64-unknown-linux-gnu.tar.gz
