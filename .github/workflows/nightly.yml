@@ -190,6 +190,7 @@ jobs:
           mkdir -p "${PACKAGE_DIR}/data"
           mkdir -p "${PACKAGE_DIR}/scripts"
           mkdir -p "${PACKAGE_DIR}/systemd"
+          mkdir -p "${PACKAGE_DIR}/templates"
           
           # Copy binaries
           cp binaries/cloakprobe "${PACKAGE_DIR}/"
@@ -210,6 +211,9 @@ jobs:
           
           # Copy systemd service
           cp systemd/cloakprobe.service "${PACKAGE_DIR}/systemd/"
+          
+          # Copy templates
+          cp -r templates/* "${PACKAGE_DIR}/templates/"
           
           # Copy README
           cp README.md "${PACKAGE_DIR}/"
@@ -247,6 +251,11 @@ jobs:
         id: date
         run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
+      - name: Setup git config
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
       - name: Delete previous nightly release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -260,7 +269,7 @@ jobs:
           fi
           
           # Check if tag exists and delete it
-          if git ls-remote --tags origin nightly | grep -q nightly; then
+          if git ls-remote --tags origin nightly 2>/dev/null | grep -q nightly; then
             echo "Tag 'nightly' exists, deleting..."
             git push origin --delete nightly || true
           else
@@ -286,6 +295,7 @@ jobs:
             - `ripe_builder` - RIPE organization database builder
             - `data/asn_db.bin` - Pre-built ASN database (from iptoasn.com)
             - `data/ripe_db.bin` - Pre-built RIPE organization database
+            - `templates/` - HTML templates (index.html.tera, privacy.html.tera)
             - `scripts/` - Database update scripts
             - `systemd/` - Systemd service file
             
@@ -305,6 +315,7 @@ jobs:
             ---
             ⚠️ **Note**: This is a pre-release build. Use at your own risk.
           prerelease: true
+          overwrite: true
           files: |
             packages/cloakprobe-x86_64-unknown-linux-gnu.tar.gz
             packages/cloakprobe-aarch64-unknown-linux-gnu.tar.gz
