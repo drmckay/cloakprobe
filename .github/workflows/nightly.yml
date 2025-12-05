@@ -313,10 +313,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create nightly \
+          gh release create "nightly-$(date -u +%Y%m%d)" \
             packages/cloakprobe-x86_64-unknown-linux-gnu.tar.gz \
             packages/cloakprobe-aarch64-unknown-linux-gnu.tar.gz \
-            --title "Nightly Build (${{ steps.date.outputs.date }})" \
+            --title "Nightly Build ($(date -u +%Y-%m-%d))" \
             --notes-file release_notes.md \
             --prerelease
 
