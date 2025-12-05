@@ -279,46 +279,50 @@ jobs:
           fi
         continue-on-error: true
 
+      - name: Create release notes
+        run: |
+          cat <<'EOF' > release_notes.md
+          ## Nightly Build - ${{ steps.date.outputs.date }}
+
+          This is an automated nightly build containing the latest code and updated databases.
+
+          ### Contents
+
+          Each package includes:
+          - `cloakprobe` - Main binary
+          - `asn_builder` - ASN database builder
+          - `ripe_builder` - RIPE organization database builder
+          - `data/asn_db.bin` - Pre-built ASN database (from iptoasn.com)
+          - `data/ripe_db.bin` - Pre-built RIPE organization database
+          - `templates/` - HTML templates (index.html.tera, privacy.html.tera)
+          - `scripts/` - Database update scripts
+          - `systemd/` - Systemd service file
+
+          ### Installation
+
+          ```bash
+          # Download and extract
+          tar -xzf cloakprobe-x86_64-unknown-linux-gnu.tar.gz
+          cd cloakprobe-x86_64-unknown-linux-gnu
+
+          # Run
+          ./cloakprobe
+          ```
+
+          For full installation instructions, see the README.
+
+          ---
+          ⚠️ **Note**: This is a pre-release build. Use at your own risk.
+          EOF
+
       - name: Create nightly release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: nightly
-          name: "Nightly Build (${{ steps.date.outputs.date }})"
-          body: |
-            ## Nightly Build - ${{ steps.date.outputs.date }}
-            
-            This is an automated nightly build containing the latest code and updated databases.
-            
-            ### Contents
-            
-            Each package includes:
-            - `cloakprobe` - Main binary
-            - `asn_builder` - ASN database builder
-            - `ripe_builder` - RIPE organization database builder
-            - `data/asn_db.bin` - Pre-built ASN database (from iptoasn.com)
-            - `data/ripe_db.bin` - Pre-built RIPE organization database
-            - `templates/` - HTML templates (index.html.tera, privacy.html.tera)
-            - `scripts/` - Database update scripts
-            - `systemd/` - Systemd service file
-            
-            ### Installation
-            
-            ```bash
-            # Download and extract
-            tar -xzf cloakprobe-x86_64-unknown-linux-gnu.tar.gz
-            cd cloakprobe-x86_64-unknown-linux-gnu
-            
-            # Run
-            ./cloakprobe
-            ```
-            
-            For full installation instructions, see the README.
-            
-            ---
-            ⚠️ **Note**: This is a pre-release build. Use at your own risk.
-          prerelease: true
-          overwrite_files: true
-          files: |
-            packages/cloakprobe-x86_64-unknown-linux-gnu.tar.gz
-            packages/cloakprobe-aarch64-unknown-linux-gnu.tar.gz
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create nightly \
+            packages/cloakprobe-x86_64-unknown-linux-gnu.tar.gz \
+            packages/cloakprobe-aarch64-unknown-linux-gnu.tar.gz \
+            --title "Nightly Build (${{ steps.date.outputs.date }})" \
+            --notes-file release_notes.md \
+            --prerelease
 
