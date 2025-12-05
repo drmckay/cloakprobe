@@ -1,6 +1,6 @@
 [package]
 name = "cloakprobe"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["CloakProbe Contributors"]
 license = "AGPL-3.0"
@@ -23,3 +23,4 @@ ipnetwork = "0.21"
 thiserror = "2.0"
 chrono = { version = "0.4", features = ["clock", "serde"] }
 memmap2 = "0.9"
+tera = "1.19"

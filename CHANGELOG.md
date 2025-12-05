@@ -7,8 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Client-side reverse DNS lookup using Cloudflare DNS over HTTPS (DoH)
+- Content Security Policy updated to allow Cloudflare DoH API connections
+
+## [0.1.1] - 2025-12-05
+
 ### Added
-- Copy-to-clipboard button for IP address in HTML UI
+- Tera template engine integration for cleaner HTML generation
+- Cloudflare Worker headers support (X-CF-Country, X-CF-City, X-CF-Region, X-CF-ASN, X-CF-Trust-Score, etc.)
+- TLS Cipher display in Connection Details card
+- HTML sanitization for all Cloudflare header values to prevent XSS attacks
+- Cloudflare Headers card with organized sections (Geo Location, Network, Connection, Security, Proxy Headers)
+- Privacy Policy page (`/privacy`) - GDPR and CCPA compliant
+- Automatic database path detection - searches `data/` directory if environment variables are not set
+- All header values now consistently use `<code>` tags for better readability
+
+### Changed
+- Connection Details card now prioritizes CF worker header values (X-CF-HTTP-Protocol, X-CF-TLS-Version) when available
+- HTML generation moved from inline format! macro to separate template files for better maintainability
+- All Cloudflare header values are sanitized before HTML rendering
+- Database paths are now automatically detected if not specified via environment variables
+- All header values consistently displayed with `<code>` tags for uniform styling
 
 ### Removed
 - CF-IPCity and City display from HTML UI
@@ -33,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configurable port via environment variable
 - Privacy modes (strict, balanced)
 
-[Unreleased]: https://github.com/drmckay/cloakprobe/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/drmckay/cloakprobe/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/drmckay/cloakprobe/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/drmckay/cloakprobe/releases/tag/v0.1.0
 

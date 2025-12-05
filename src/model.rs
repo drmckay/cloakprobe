@@ -95,6 +95,90 @@ pub struct ServerInfo {
     pub version: String,
 }
 
+#[derive(Serialize, Default)]
+pub struct CloudflareGeoHeaders {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cf_ipcountry: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub country: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub city: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub region: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub region_code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub continent: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latitude: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub longitude: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub postal_code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timezone: Option<String>,
+}
+
+#[derive(Serialize, Default)]
+pub struct CloudflareNetworkHeaders {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub asn: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub as_organization: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub colo: Option<String>,
+}
+
+#[derive(Serialize, Default)]
+pub struct CloudflareConnectionHeaders {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cf_visitor: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub x_forwarded_proto: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub http_protocol: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tls_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tls_cipher: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cf_request_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cf_cache_status: Option<String>,
+}
+
+#[derive(Serialize, Default)]
+pub struct CloudflareSecurityHeaders {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trust_score: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bot_score: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verified_bot: Option<String>,
+}
+
+#[derive(Serialize, Default)]
+pub struct CloudflareProxyHeaders {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub x_forwarded_for: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub x_real_ip: Option<String>,
+}
+
+#[derive(Serialize, Default)]
+pub struct CloudflareHeaders {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub geo: Option<CloudflareGeoHeaders>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub network: Option<CloudflareNetworkHeaders>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub connection: Option<CloudflareConnectionHeaders>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub security: Option<CloudflareSecurityHeaders>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proxy: Option<CloudflareProxyHeaders>,
+}
+
 #[derive(Serialize)]
 pub struct InfoResponse {
     pub ip: String,
@@ -105,4 +189,6 @@ pub struct InfoResponse {
     pub client: ClientInfo,
     pub privacy: PrivacyInfo,
     pub server: ServerInfo,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cloudflare: Option<CloudflareHeaders>,
 }

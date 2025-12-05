@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Privacy Policy - CloakProbe</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="CloakProbe Privacy Policy - GDPR and CCPA compliant">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    :root {
+      color-scheme: dark;
+      --bg-gradient-start: #0f172a;
+      --bg-gradient-end: #020617;
+      --card-bg: rgba(15, 23, 42, 0.95);
+      --card-border: rgba(148, 163, 184, 0.2);
+      --text-primary: #f9fafb;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-primary: #22c55e;
+      --accent-secondary: #0ea5e9;
+      --accent-gradient: linear-gradient(135deg, #22c55e, #0ea5e9);
+      --section-bg: rgba(30, 41, 59, 0.5);
+    }
+    body {
+      background: radial-gradient(ellipse at top, var(--bg-gradient-start), var(--bg-gradient-end));
+      color: var(--text-primary);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+      line-height: 1.8;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+    .header h1 {
+      font-size: clamp(2rem, 5vw, 3rem);
+      font-weight: 800;
+      background: var(--accent-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.5rem;
+    }
+    .header p {
+      color: var(--text-secondary);
+      font-size: 1.1rem;
+    }
+    .content {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 1rem;
+      padding: 2.5rem;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+    }
+    h2 {
+      color: var(--accent-primary);
+      font-size: 1.75rem;
+      margin-top: 2.5rem;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid var(--card-border);
+    }
+    h2:first-child {
+      margin-top: 0;
+    }
+    h3 {
+      color: var(--accent-secondary);
+      font-size: 1.3rem;
+      margin-top: 1.5rem;
+      margin-bottom: 0.75rem;
+    }
+    p {
+      margin-bottom: 1rem;
+      color: var(--text-secondary);
+    }
+    ul, ol {
+      margin-left: 1.5rem;
+      margin-bottom: 1rem;
+      color: var(--text-secondary);
+    }
+    li {
+      margin-bottom: 0.5rem;
+    }
+    a {
+      color: var(--accent-secondary);
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .toc {
+      background: var(--section-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .toc h3 {
+      margin-top: 0;
+      color: var(--accent-primary);
+    }
+    .toc ul {
+      list-style: none;
+      margin-left: 0;
+    }
+    .toc a {
+      color: var(--text-secondary);
+      display: block;
+      padding: 0.25rem 0;
+    }
+    .toc a:hover {
+      color: var(--accent-secondary);
+    }
+    .highlight {
+      background: var(--section-bg);
+      padding: 0.2rem 0.4rem;
+      border-radius: 0.25rem;
+      color: var(--accent-primary);
+      font-weight: 600;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 3rem;
+      padding-top: 2rem;
+      border-top: 1px solid var(--card-border);
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+    .footer a {
+      color: var(--accent-secondary);
+      text-decoration: none;
+      margin: 0 0.5rem;
+    }
+    .footer a:hover {
+      text-decoration: underline;
+    }
+    @media (max-width: 768px) {
+      .content {
+        padding: 1.5rem;
+      }
+      h2 {
+        font-size: 1.5rem;
+      }
+      h3 {
+        font-size: 1.1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div style="text-align: left; margin-bottom: 1rem;">
+        <a href="/" style="color: var(--accent-secondary); text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.9rem;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+          Back to CloakProbe
+        </a>
+      </div>
+      <h1>Privacy Policy</h1>
+      <p>Last updated: December 2025</p>
+    </div>
+
+    <div class="content">
+      <div class="toc">
+        <h3>Table of Contents</h3>
+        <ul>
+          <li><a href="#introduction">1. Introduction</a></li>
+          <li><a href="#data-collected">2. Data We Collect</a></li>
+          <li><a href="#data-processing">3. How We Process Data</a></li>
+          <li><a href="#cloudflare">4. Cloudflare Services</a></li>
+          <li><a href="#data-retention">5. Data Retention</a></li>
+          <li><a href="#your-rights">6. Your Rights</a></li>
+          <li><a href="#security">7. Security</a></li>
+          <li><a href="#changes">8. Changes to This Policy</a></li>
+          <li><a href="#contact">9. Contact</a></li>
+        </ul>
+      </div>
+
+      <h2 id="introduction">1. Introduction</h2>
+      <p>
+        CloakProbe is a privacy-first, security-focused IP information service. This Privacy Policy explains how we collect, process, and handle your data when you use our service.
+      </p>
+      <p>
+        <strong>Data Controller:</strong> CloakProbe is an open-source project. For privacy inquiries, please contact us through <a href="https://github.com/drmckay/cloakprobe/issues" target="_blank" rel="noopener noreferrer">GitHub Issues</a>.
+      </p>
+      <p>
+        <strong>Legal Basis:</strong> We process your data based on legitimate interest to provide the IP information service you request. We do not use your data for marketing, advertising, or any purpose beyond providing the requested service.
+      </p>
+
+      <h2 id="data-collected">2. Data We Collect</h2>
+      <p>
+        When you access CloakProbe, we process the following information from your HTTP request:
+      </p>
+      
+      <h3>2.1 IP Address</h3>
+      <p>
+        We read your IP address from HTTP headers (specifically <code>CF-Connecting-IP</code> when behind Cloudflare) to:
+      </p>
+      <ul>
+        <li>Display your IP address back to you</li>
+        <li>Perform ASN (Autonomous System Number) lookups using local databases</li>
+        <li>Determine network information (prefix, RIR, country code)</li>
+      </ul>
+
+      <h3>2.2 HTTP Headers</h3>
+      <p>We process the following HTTP headers:</p>
+      <ul>
+        <li><strong>User-Agent:</strong> Browser/client identification</li>
+        <li><strong>Accept-Language:</strong> Language preferences</li>
+        <li><strong>Accept-Encoding:</strong> Compression support</li>
+        <li><strong>Sec-CH-UA / Sec-CH-UA-Platform:</strong> Client hints for browser/platform information</li>
+      </ul>
+
+      <h3>2.3 Cloudflare Worker Headers</h3>
+      <p>
+        If your request passes through a Cloudflare Worker that adds custom headers, we may process:
+      </p>
+      <ul>
+        <li><strong>Geo Location:</strong> Country, city, region, continent, latitude, longitude, postal code, timezone</li>
+        <li><strong>Network:</strong> ASN, AS organization, datacenter/colo information</li>
+        <li><strong>Connection:</strong> HTTP protocol version, TLS version, TLS cipher</li>
+        <li><strong>Security:</strong> Trust score, bot score, verified bot status</li>
+        <li><strong>Proxy Headers:</strong> X-Forwarded-For, X-Real-IP, X-Forwarded-Proto</li>
+      </ul>
+
+      <h3>2.4 What We Do NOT Collect</h3>
+      <ul>
+        <li><span class="highlight">No cookies</span> - We do not set or read cookies</li>
+        <li><span class="highlight">No tracking</span> - We do not use analytics, tracking pixels, or fingerprinting</li>
+        <li><span class="highlight">No third-party requests</span> - All resources are served from the same origin</li>
+        <li><span class="highlight">No external API calls</span> - ASN and organization lookups use local databases</li>
+        <li><span class="highlight">No automatic external requests</span> - The page does not send any external requests automatically, neither client-side nor server-side. Any external requests (such as reverse DNS lookups) only occur when you explicitly interact with the page (e.g., clicking a button)</li>
+      </ul>
+
+      <h2 id="data-processing">3. How We Process Data</h2>
+      
+      <h3>3.1 Data Processing</h3>
+      <p>
+        All data processing happens <span class="highlight">in memory only</span>. We do not write any data to disk on the origin server. Data is:
+      </p>
+      <ul>
+        <li>Read from HTTP headers</li>
+        <li>Processed to generate the response</li>
+        <li>Discarded immediately after the response is sent</li>
+      </ul>
+
+      <h3>3.2 Data Storage</h3>
+      <p>
+        <span class="highlight">No disk storage:</span> The origin server does not store any data on disk. All processing is ephemeral and happens in memory.
+      </p>
+      <p>
+        <span class="highlight">No logging:</span> Logging is disabled on the origin server. Your IP address and request data are not logged.
+      </p>
+
+      <h3>3.3 Data Sanitization</h3>
+      <p>
+        All header values are sanitized before being displayed to prevent XSS (Cross-Site Scripting) attacks. HTML special characters are escaped, and control characters are removed.
+      </p>
+
+      <h3>3.4 Local Database Lookups</h3>
+      <p>
+        We use local, read-only databases for ASN and organization lookups:
+      </p>
+      <ul>
+        <li><strong>IP-to-ASN Database:</strong> From <a href="https://iptoasn.com" target="_blank" rel="noopener noreferrer">iptoasn.com</a> (Public Domain/PDDL)</li>
+        <li><strong>RIPE Organization Database:</strong> From <a href="https://www.ripe.net" target="_blank" rel="noopener noreferrer">RIPE NCC</a> dumps</li>
+      </ul>
+      <p>
+        These databases are downloaded during installation and updated via cron jobs. Lookups happen entirely in memory using memory-mapped files. No external API calls are made.
+      </p>
+
+      <h3>3.5 Reverse DNS Lookup (Optional Feature)</h3>
+      <p>
+        CloakProbe includes an optional reverse DNS lookup feature that allows you to query the hostname (PTR record) associated with your IP address. This feature:
+      </p>
+      <ul>
+        <li><strong>Only works on user interaction:</strong> The reverse DNS lookup is performed <span class="highlight">only when you explicitly click the "Lookup Reverse DNS" button</span>. The page does not perform any DNS queries automatically.</li>
+        <li><strong>Client-side only:</strong> The lookup happens entirely in your browser using Cloudflare's DNS over HTTPS (DoH) service at <code>cloudflare-dns.com</code>. No data is sent to the CloakProbe server.</li>
+        <li><strong>No automatic requests:</strong> The page does not send any external requests automatically, neither client-side nor server-side. External requests only occur when you explicitly interact with the page.</li>
+        <li><strong>Privacy-focused:</strong> Cloudflare's DoH service is privacy-focused and does not log queries. Your DNS query is sent directly from your browser to Cloudflare's DNS service.</li>
+        <li><strong>No data storage:</strong> The reverse DNS lookup result is displayed only in your browser and is not stored or logged by CloakProbe.</li>
+      </ul>
+      <p>
+        <strong>Important:</strong> If you do not click the reverse DNS lookup button, no DNS queries are made and no external requests are sent. The page operates entirely passively until you interact with it.
+      </p>
+
+      <h2 id="cloudflare">4. Cloudflare Services</h2>
+      <p>
+        CloakProbe is hosted behind <a href="https://www.cloudflare.com" target="_blank" rel="noopener noreferrer">Cloudflare</a>, a content delivery network (CDN) and security service. This means your requests pass through Cloudflare's network before reaching our origin server.
+      </p>
+
+      <h3>4.1 Cloudflare's Data Processing</h3>
+      <p>
+        Cloudflare processes certain data according to their <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener noreferrer">Privacy Policy</a>. This includes:
+      </p>
+      <ul>
+        <li>CDN caching and content delivery</li>
+        <li>DDoS protection and security filtering</li>
+        <li>SSL/TLS termination</li>
+        <li>Request routing and optimization</li>
+      </ul>
+      <p>
+        Cloudflare is compliant with various standards including SOC 2, ISO 27001, and others. For details about Cloudflare's data processing practices, please refer to their <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
+      </p>
+
+      <h3>4.2 Origin Server vs. Cloudflare</h3>
+      <p>
+        It is important to distinguish between:
+      </p>
+      <ul>
+        <li><strong>Cloudflare's data processing:</strong> Happens on Cloudflare's network (CDN, security, caching)</li>
+        <li><strong>Origin server (CloakProbe) data processing:</strong> Happens on our server (in-memory only, no storage, no logging)</li>
+      </ul>
+      <p>
+        The origin server (CloakProbe) does not store or log any data. All data processing on the origin server is ephemeral and happens in memory only.
+      </p>
+
+      <h2 id="data-retention">5. Data Retention</h2>
+      <p>
+        <span class="highlight">No data retention:</span> Since we do not store any data on disk and logging is disabled, we do not retain any personal data. Data is processed in memory and discarded immediately after the response is sent.
+      </p>
+      <p>
+        The only persistent data is:
+      </p>
+      <ul>
+        <li>Local ASN and RIPE databases (which contain IP range mappings, not personal data)</li>
+        <li>These databases are updated periodically but do not contain any user-specific information</li>
+      </ul>
+
+      <h2 id="your-rights">6. Your Rights</h2>
+
+      <h3>6.1 GDPR Rights (EU Users)</h3>
+      <p>
+        If you are located in the European Union, you have the following rights under the General Data Protection Regulation (GDPR):
+      </p>
+      <ul>
+        <li><strong>Right of Access:</strong> You can request information about what data we process about you</li>
+        <li><strong>Right to Rectification:</strong> You can request correction of inaccurate data</li>
+        <li><strong>Right to Erasure:</strong> You can request deletion of your data (note: we don't store data, so there's nothing to delete)</li>
+        <li><strong>Right to Restriction:</strong> You can request restriction of processing</li>
+        <li><strong>Right to Data Portability:</strong> You can request your data in a structured format</li>
+        <li><strong>Right to Object:</strong> You can object to processing based on legitimate interest</li>
+        <li><strong>Right to Lodge a Complaint:</strong> You can file a complaint with your local supervisory authority</li>
+      </ul>
+      <p>
+        To exercise these rights, please contact us through <a href="https://github.com/drmckay/cloakprobe/issues" target="_blank" rel="noopener noreferrer">GitHub Issues</a>.
+      </p>
+
+      <h3>6.2 CCPA Rights (California Users)</h3>
+      <p>
+        If you are a California resident, you have the following rights under the California Consumer Privacy Act (CCPA):
+      </p>
+      <ul>
+        <li><strong>Right to Know:</strong> You can request information about what personal information we collect, use, and share</li>
+        <li><strong>Right to Delete:</strong> You can request deletion of your personal information (note: we don't store data, so there's nothing to delete)</li>
+        <li><strong>Right to Opt-Out:</strong> You can opt-out of the sale of personal information (we do not sell personal information)</li>
+        <li><strong>Non-Discrimination:</strong> We will not discriminate against you for exercising your CCPA rights</li>
+      </ul>
+      <p>
+        To exercise these rights, please contact us through <a href="https://github.com/drmckay/cloakprobe/issues" target="_blank" rel="noopener noreferrer">GitHub Issues</a>.
+      </p>
+
+      <h2 id="security">7. Security</h2>
+      <p>
+        We implement various security measures to protect your data:
+      </p>
+      <ul>
+        <li><strong>Input Sanitization:</strong> All header values are sanitized to prevent XSS attacks</li>
+        <li><strong>Security Headers:</strong> We set comprehensive security headers (CSP, HSTS, X-Frame-Options, etc.)</li>
+        <li><strong>No External Dependencies:</strong> All resources are served from the same origin</li>
+        <li><strong>Read-Only Operations:</strong> We only respond to GET requests, no data modification</li>
+        <li><strong>Memory-Mapped Databases:</strong> Local databases are read-only and memory-mapped</li>
+        <li><strong>Cloudflare Protection:</strong> DDoS protection and security filtering via Cloudflare</li>
+      </ul>
+
+      <h2 id="changes">8. Changes to This Policy</h2>
+      <p>
+        We may update this Privacy Policy from time to time. The "Last updated" date at the top of this page indicates when the policy was last revised. We encourage you to review this policy periodically.
+      </p>
+      <p>
+        If we make material changes to this policy, we will update the "Last updated" date and, if possible, provide notice through our service.
+      </p>
+
+      <h2 id="contact">9. Contact</h2>
+      <p>
+        If you have questions about this Privacy Policy or wish to exercise your rights, please contact us:
+      </p>
+      <ul>
+        <li><strong>GitHub Issues:</strong> <a href="https://github.com/drmckay/cloakprobe/issues" target="_blank" rel="noopener noreferrer">https://github.com/drmckay/cloakprobe/issues</a></li>
+        <li><strong>Project Repository:</strong> <a href="https://github.com/drmckay/cloakprobe" target="_blank" rel="noopener noreferrer">https://github.com/drmckay/cloakprobe</a></li>
+        <li><strong>Main Website:</strong> <a href="https://cloakprobe.dev" target="_blank" rel="noopener noreferrer">https://cloakprobe.dev</a></li>
+      </ul>
+    </div>
+
+    <div class="footer">
+      <p>
+        <a href="/">← Back to CloakProbe</a>
+        <span>•</span>
+        <a href="https://cloakprobe.dev">cloakprobe.dev</a>
+        <span>•</span>
+        <a href="https://github.com/drmckay/cloakprobe" target="_blank" rel="noopener noreferrer">GitHub</a>
+      </p>
+      <p style="margin-top: 0.5rem;">No tracking • No ads • Privacy-focused</p>
+    </div>
+  </div>
+</body>
+</html>
+

@@ -26,7 +26,10 @@ Privacy-first, security-focused IP information service designed to run behind Cl
 - ⚡ **Fast**: Built with Rust for performance
 - 🔧 **Easy Setup**: Simple configuration, Docker-ready
 - 📡 **Cloudflare Integration**: Reads client IP from Cloudflare headers (CF-Connecting-IP)
+- 🌍 **Cloudflare Worker Headers**: Supports extended Cloudflare Worker headers (X-CF-Country, X-CF-City, X-CF-ASN, X-CF-Trust-Score, etc.)
+- 🔒 **XSS Protection**: All Cloudflare header values are sanitized before HTML rendering
 - 🗄️ **Local ASN Database**: Uses ip2asn-based binary database (`asn_db.bin`)
+- 🔍 **Reverse DNS Lookup**: Client-side reverse DNS (PTR) lookup using Cloudflare DNS over HTTPS (DoH) - only on user interaction
 
 ## Requirements
 
@@ -97,14 +100,17 @@ sudo systemctl start cloakprobe
 ### Environment Variables
 
 - `CLOAKPROBE_PRIVACY_MODE`: `strict` or `balanced` (or `CFDEBUG_PRIVACY_MODE` - backward compatible)
-- `CLOAKPROBE_ASN_DB_PATH`: Path to the ASN database binary file (default: `data/asn_db.bin`). Or `CFDEBUG_ASN_DB_PATH`.
-- `CLOAKPROBE_RIPE_DB_PATH`: Path to the RIPE organization database (default: `data/ripe_db.bin`). Or `CFDEBUG_RIPE_DB_PATH`.
+- `CLOAKPROBE_ASN_DB_PATH`: Path to the ASN database binary file. If not set, automatically searches in `data/asn_db.bin` and `./data/asn_db.bin`. Or `CFDEBUG_ASN_DB_PATH`.
+- `CLOAKPROBE_RIPE_DB_PATH`: Path to the RIPE organization database. If not set, automatically searches in `data/ripe_db.bin` and `./data/ripe_db.bin`. Or `CFDEBUG_RIPE_DB_PATH`.
 - `CLOAKPROBE_REGION`: Optional string, e.g. `eu-central`, appears in API response. Or `CFDEBUG_REGION`.
 - `PORT`: Port to bind to (default: `8080`)
+
+**Note**: If database paths are not specified via environment variables, CloakProbe will automatically search for databases in the `data/` directory relative to the current working directory or the binary location.
 
 ## API Endpoints
 
 - `GET /` – HTML UI (dark card-based view with detailed IP information)
+- `GET /privacy` – Privacy Policy page (GDPR and CCPA compliant)
 - `GET /api/v1/info` – JSON debug info
 - `GET /api/v1/plain` – Plain text output, convenient for CLI
 - `GET /healthz` – Health check, returns `{"status":"ok"}`
@@ -144,6 +150,14 @@ cargo build --release
 ```
 
 Then:
+
+```bash
+# Databases will be automatically found in ./data/ if environment variables are not set
+CLOAKPROBE_PRIVACY_MODE=strict \
+  ./target/release/cloakprobe
+```
+
+Or explicitly specify database paths:
 
 ```bash
 CLOAKPROBE_ASN_DB_PATH=/opt/cloakprobe/data/asn_db.bin \
@@ -226,6 +240,7 @@ server {
 - TLS mode: `Full` or `Full (strict)`.
 - The Rust app reads `CF-Connecting-IP`, `CF-Visitor`, `CF-Ray`, etc. headers –
   these are added by Cloudflare to the request, and nginx forwards them.
+- **Cloudflare Worker Headers**: If you use a Cloudflare Worker that adds custom headers (e.g., `X-CF-Country`, `X-CF-City`, `X-CF-ASN`, `X-CF-Trust-Score`), these will be automatically displayed in the Cloudflare Headers card. All header values are sanitized to prevent XSS attacks.
 
 ---
 
@@ -240,7 +255,32 @@ The app sets the following HTTP headers on every response:
 - `X-Content-Type-Options`
 - `Permissions-Policy`
 
-No external scripts, fonts, or analytics sources; all assets come from the same domain.
+No external scripts, fonts, or analytics sources; all assets come from the same domain. The only external connection allowed is to `cloudflare-dns.com` for the optional client-side reverse DNS lookup feature (only when user explicitly clicks the lookup button).
+
+### Input Sanitization
+
+All Cloudflare header values are sanitized before being rendered in HTML to prevent XSS (Cross-Site Scripting) attacks. HTML special characters (`<`, `>`, `&`, `"`, `'`, `/`) are automatically escaped, ensuring that malicious header values cannot inject JavaScript or HTML into the page.
+
+### Privacy Policy
+
+CloakProbe includes a comprehensive Privacy Policy page (`/privacy`) that is GDPR and CCPA compliant. The policy explains:
+- What data is collected and processed
+- How data is handled (no disk storage, no logging in strict mode)
+- Cloudflare's data processing practices
+- User rights under GDPR and CCPA
+- Security measures implemented
+- Reverse DNS lookup feature (client-side only, on user interaction)
+
+The privacy policy is accessible from the main page footer and can be viewed at `/privacy`.
+
+### Reverse DNS Lookup
+
+CloakProbe includes an optional client-side reverse DNS lookup feature:
+- **User-initiated only**: The lookup only happens when the user explicitly clicks the "Lookup Reverse DNS" button
+- **Client-side**: Uses Cloudflare DNS over HTTPS (DoH) directly from the browser
+- **No server-side processing**: No data is sent to the CloakProbe server
+- **Privacy-focused**: Cloudflare DoH is privacy-focused and does not log queries
+- **No automatic requests**: The page does not send any external requests automatically, neither client-side nor server-side
 
 ---
 
@@ -268,8 +308,9 @@ Please report security vulnerabilities privately. See [SECURITY.md](SECURITY.md)
 - **Tor / VPN detection**:
   - The `NetworkInfo` struct contains `tor_exit` and `vpn_or_hosting` flags, these default to `false`.
 - **Reverse DNS**:
-  - `InfoResponse.reverse_dns` is currently `None`.
-  - Async reverse lookup (with timeout) can be added later.
+  - Client-side reverse DNS lookup is available via the HTML UI using Cloudflare DNS over HTTPS (DoH)
+  - The lookup happens entirely in the browser when the user clicks the "Lookup Reverse DNS" button
+  - No server-side reverse DNS lookup is implemented (the API response does not include reverse DNS)
 
 ## Building Releases
 

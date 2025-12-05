@@ -247,12 +247,28 @@ jobs:
         id: date
         run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
-      - name: Delete previous nightly release
-        uses: dev-drprasad/delete-tag-and-release@v1.1
+      - name: Setup GitHub CLI
+        uses: cli/cli@v2
         with:
-          tag_name: nightly
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          delete_release: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete previous nightly release
+        run: |
+          # Check if release exists before trying to delete
+          if gh release view nightly >/dev/null 2>&1; then
+            echo "Release 'nightly' exists, deleting..."
+            gh release delete nightly --yes || true
+          else
+            echo "Release 'nightly' does not exist, skipping deletion"
+          fi
+          
+          # Check if tag exists and delete it
+          if git ls-remote --tags origin nightly | grep -q nightly; then
+            echo "Tag 'nightly' exists, deleting..."
+            git push origin --delete nightly || true
+          else
+            echo "Tag 'nightly' does not exist, skipping tag deletion"
+          fi
         continue-on-error: true
 
       - name: Create nightly release

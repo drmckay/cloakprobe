@@ -19,7 +19,7 @@ pub fn security_headers_layer() -> (
              style-src 'self' 'unsafe-inline'; \
              img-src 'self' data:; \
              font-src 'self'; \
-             connect-src 'self'; \
+             connect-src 'self' https://cloudflare-dns.com; \
              frame-ancestors 'none'",
         ),
     );

@@ -12,12 +12,55 @@ use axum::{
 };
 use chrono::Utc;
 use std::sync::Arc;
+use tera::{Context, Tera};
 
 #[derive(Clone)]
 pub struct AppState {
     pub config: AppConfig,
     pub asn_db: Arc<dyn AsnDatabase>,
 }
+
+/// Sanitizes a header value for safe HTML output.
+/// Escapes HTML special characters to prevent XSS attacks.
+fn sanitize_header(value: Option<String>) -> String {
+    value
+        .map(|v| {
+            v.chars()
+                .flat_map(|c| match c {
+                    '<' => "&lt;".chars().collect(),
+                    '>' => "&gt;".chars().collect(),
+                    '&' => "&amp;".chars().collect(),
+                    '"' => "&quot;".chars().collect(),
+                    '\'' => "&#x27;".chars().collect(),
+                    '/' => "&#x2F;".chars().collect(),
+                    c if c.is_control() && c != '\n' && c != '\r' && c != '\t' => {
+                        Vec::new() // Remove control characters except newlines and tabs
+                    }
+                    c => vec![c], // Keep valid characters
+                })
+                .collect::<String>()
+        })
+        .unwrap_or_else(|| "—".to_string())
+}
+
+/// Sanitizes a header value for safe JSON output.
+/// Removes control characters and ensures JSON-safe string.
+fn sanitize_for_json(value: Option<String>) -> Option<String> {
+    value.map(|v| {
+        v.chars()
+            .filter(|c| {
+                // Keep printable characters, newlines, tabs, carriage returns
+                c.is_ascii_graphic()
+                    || *c == '\n'
+                    || *c == '\r'
+                    || *c == '\t'
+                    || c.is_alphanumeric()
+                    || c.is_whitespace()
+            })
+            .collect::<String>()
+    })
+}
+
 
 pub async fn info_handler(
     State(state): State<AppState>,
@@ -28,14 +71,71 @@ pub async fn info_handler(
     let asn_info = state.asn_db.lookup(ctx.ip);
 
     let network = NetworkInfo::from_asn(asn_info);
+
+    // Extract Cloudflare Worker headers
+    let x_cf_http_protocol = headers
+        .get("X-CF-HTTP-Protocol")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_tls_version = headers
+        .get("X-CF-TLS-Version")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_tls_cipher = headers
+        .get("X-CF-TLS-Cipher")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    // Prioritize CF worker headers for connection info
     let connection = ConnectionInfo {
-        tls_version: ctx.tls_version,
-        http_protocol: ctx.http_protocol,
-        cf_ray: ctx.cf_ray,
-        datacenter: ctx.cf_datacenter,
+        tls_version: x_cf_tls_version
+            .as_ref()
+            .filter(|v| !v.is_empty())
+            .or(ctx.tls_version.as_ref())
+            .and_then(|v| sanitize_for_json(Some(v.clone()))),
+        http_protocol: x_cf_http_protocol
+            .as_ref()
+            .filter(|v| !v.is_empty())
+            .or(ctx.http_protocol.as_ref())
+            .and_then(|v| sanitize_for_json(Some(v.clone()))),
+        cf_ray: sanitize_for_json(ctx.cf_ray.clone()),
+        datacenter: sanitize_for_json(ctx.cf_datacenter.clone()),
     };
 
-    let client = extract_client_info(&headers);
+    // Extract and sanitize client info
+    let client = {
+        let ua = headers
+            .get("User-Agent")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let accept_language = headers
+            .get("Accept-Language")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let accept_encoding = headers
+            .get("Accept-Encoding")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let sec_ch_ua = headers
+            .get("Sec-CH-UA")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let sec_ch_ua_platform = headers
+            .get("Sec-CH-UA-Platform")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+
+        ClientInfo {
+            user_agent: sanitize_for_json(ua),
+            accept_language: sanitize_for_json(accept_language),
+            accept_encoding: sanitize_for_json(accept_encoding),
+            client_hints: ClientHints {
+                sec_ch_ua: sanitize_for_json(sec_ch_ua),
+                sec_ch_ua_platform: sanitize_for_json(sec_ch_ua_platform),
+            },
+        }
+    };
+
     let privacy = PrivacyInfo::from(&state.config.privacy_mode);
     let server = ServerInfo {
         timestamp_utc: Utc::now().to_rfc3339(),
@@ -43,6 +143,165 @@ pub async fn info_handler(
             .or_else(|_| std::env::var("CFDEBUG_REGION"))
             .ok(),
         version: env!("CARGO_PKG_VERSION").to_string(),
+    };
+
+    // Extract Cloudflare headers
+    let cf_visitor = headers
+        .get("CF-Visitor")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let cf_ipcountry = headers
+        .get("CF-IPCountry")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let cf_request_id = headers
+        .get("CF-Request-ID")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let cf_cache_status = headers
+        .get("CF-Cache-Status")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_forwarded_for = headers
+        .get("X-Forwarded-For")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_real_ip = headers
+        .get("X-Real-IP")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_forwarded_proto = headers
+        .get("X-Forwarded-Proto")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    // Extract Cloudflare Worker headers - Geo Location
+    let x_cf_country = headers
+        .get("X-CF-Country")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_city = headers
+        .get("X-CF-City")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_region = headers
+        .get("X-CF-Region")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_region_code = headers
+        .get("X-CF-Region-Code")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_continent = headers
+        .get("X-CF-Continent")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_latitude = headers
+        .get("X-CF-Latitude")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_longitude = headers
+        .get("X-CF-Longitude")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_postal_code = headers
+        .get("X-CF-Postal-Code")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_timezone = headers
+        .get("X-CF-Timezone")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    // Extract Cloudflare Worker headers - Network
+    let x_cf_asn = headers
+        .get("X-CF-ASN")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_as_organization = headers
+        .get("X-CF-AS-Organization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_colo = headers
+        .get("X-CF-Colo")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    // Extract Cloudflare Worker headers - Security
+    let x_cf_trust_score = headers
+        .get("X-CF-Trust-Score")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_bot_score = headers
+        .get("X-CF-Bot-Score")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_verified_bot = headers
+        .get("X-CF-Verified-Bot")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    // Build Cloudflare headers structure
+    let mut geo = CloudflareGeoHeaders::default();
+    if cf_ipcountry.is_some() || x_cf_country.is_some() || x_cf_city.is_some() {
+        geo.cf_ipcountry = sanitize_for_json(cf_ipcountry);
+        geo.country = sanitize_for_json(x_cf_country);
+        geo.city = sanitize_for_json(x_cf_city);
+        geo.region = sanitize_for_json(x_cf_region);
+        geo.region_code = sanitize_for_json(x_cf_region_code);
+        geo.continent = sanitize_for_json(x_cf_continent);
+        geo.latitude = sanitize_for_json(x_cf_latitude);
+        geo.longitude = sanitize_for_json(x_cf_longitude);
+        geo.postal_code = sanitize_for_json(x_cf_postal_code);
+        geo.timezone = sanitize_for_json(x_cf_timezone);
+    }
+
+    let mut network_headers = CloudflareNetworkHeaders::default();
+    if x_cf_asn.is_some() || x_cf_as_organization.is_some() || x_cf_colo.is_some() {
+        network_headers.asn = sanitize_for_json(x_cf_asn);
+        network_headers.as_organization = sanitize_for_json(x_cf_as_organization);
+        network_headers.colo = sanitize_for_json(x_cf_colo);
+    }
+
+    let mut connection_headers = CloudflareConnectionHeaders::default();
+    if cf_visitor.is_some() || x_forwarded_proto.is_some() || x_cf_http_protocol.is_some() || x_cf_tls_version.is_some() || x_cf_tls_cipher.is_some() || cf_request_id.is_some() || cf_cache_status.is_some() {
+        connection_headers.cf_visitor = sanitize_for_json(cf_visitor);
+        connection_headers.x_forwarded_proto = sanitize_for_json(x_forwarded_proto);
+        connection_headers.http_protocol = sanitize_for_json(x_cf_http_protocol);
+        connection_headers.tls_version = sanitize_for_json(x_cf_tls_version);
+        connection_headers.tls_cipher = sanitize_for_json(x_cf_tls_cipher);
+        connection_headers.cf_request_id = sanitize_for_json(cf_request_id);
+        connection_headers.cf_cache_status = sanitize_for_json(cf_cache_status);
+    }
+
+    let mut security = CloudflareSecurityHeaders::default();
+    if x_cf_trust_score.is_some() || x_cf_bot_score.is_some() || x_cf_verified_bot.is_some() {
+        security.trust_score = sanitize_for_json(x_cf_trust_score);
+        security.bot_score = sanitize_for_json(x_cf_bot_score);
+        security.verified_bot = sanitize_for_json(x_cf_verified_bot);
+    }
+
+    let mut proxy = CloudflareProxyHeaders::default();
+    if x_forwarded_for.is_some() || x_real_ip.is_some() {
+        proxy.x_forwarded_for = sanitize_for_json(x_forwarded_for);
+        proxy.x_real_ip = sanitize_for_json(x_real_ip);
+    }
+
+    let cloudflare = if geo.cf_ipcountry.is_some()
+        || network_headers.asn.is_some()
+        || connection_headers.cf_visitor.is_some()
+        || security.trust_score.is_some()
+        || proxy.x_forwarded_for.is_some()
+    {
+        Some(CloudflareHeaders {
+            geo: if geo.cf_ipcountry.is_some() { Some(geo) } else { None },
+            network: if network_headers.asn.is_some() { Some(network_headers) } else { None },
+            connection: if connection_headers.cf_visitor.is_some() { Some(connection_headers) } else { None },
+            security: if security.trust_score.is_some() { Some(security) } else { None },
+            proxy: if proxy.x_forwarded_for.is_some() { Some(proxy) } else { None },
+        })
+    } else {
+        None
     };
 
     let resp = InfoResponse {
@@ -54,6 +313,7 @@ pub async fn info_handler(
         client,
         privacy,
         server,
+        cloudflare,
     };
 
     Ok(Json(resp))
@@ -249,475 +509,375 @@ pub async fn html_handler(State(state): State<AppState>, headers: HeaderMap) -> 
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
 
-    let html = format!(
-        r#"<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>CloakProbe - {ip}</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="CloakProbe - Your IP address and network information">
-  <style>
-    * {{
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }}
-    :root {{
-      color-scheme: dark;
-      --bg-gradient-start: #0f172a;
-      --bg-gradient-end: #020617;
-      --card-bg: rgba(15, 23, 42, 0.95);
-      --card-border: rgba(148, 163, 184, 0.2);
-      --text-primary: #f9fafb;
-      --text-secondary: #94a3b8;
-      --text-muted: #64748b;
-      --accent-primary: #22c55e;
-      --accent-secondary: #0ea5e9;
-      --accent-gradient: linear-gradient(135deg, #22c55e, #0ea5e9);
-      --section-bg: rgba(30, 41, 59, 0.5);
-    }}
-    body {{
-      background: radial-gradient(ellipse at top, var(--bg-gradient-start), var(--bg-gradient-end));
-      color: var(--text-primary);
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      min-height: 100vh;
-      padding: 2rem 1rem;
-      line-height: 1.6;
-    }}
-    .container {{
-      max-width: 1200px;
-      margin: 0 auto;
-    }}
-    .header {{
-      text-align: center;
-      margin-bottom: 3rem;
-    }}
-    .header h1 {{
-      font-size: clamp(2rem, 5vw, 3rem);
-      font-weight: 800;
-      background: var(--accent-gradient);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      margin-bottom: 0.5rem;
-    }}
-    .header p {{
-      color: var(--text-secondary);
-      font-size: 1.1rem;
-    }}
-    .ip-display {{
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 1.5rem;
-      padding: 3rem 2rem;
-      text-align: center;
-      margin-bottom: 2rem;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-    }}
-    .ip-label {{
-      text-transform: uppercase;
-      letter-spacing: 0.2em;
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      margin-bottom: 1rem;
-      font-weight: 600;
-    }}
-    .ip-value-container {{
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.75rem;
-      margin-bottom: 0.5rem;
-    }}
-    .ip-value {{
-      font-size: clamp(2.5rem, 6vw, 4rem);
-      font-weight: 700;
-      font-family: "SF Mono", "Monaco", "Cascadia Code", monospace;
-    }}
-    .copy-btn {{
-      background: var(--section-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 0.5rem;
-      padding: 0.5rem;
-      cursor: pointer;
-      color: var(--text-secondary);
-      transition: all 0.2s ease;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }}
-    .copy-btn:hover {{
-      background: var(--card-border);
-      color: var(--text-primary);
-    }}
-    .copy-btn:active {{
-      transform: scale(0.95);
-    }}
-    .copy-btn.copied {{
-      background: rgba(34, 197, 94, 0.2);
-      color: var(--accent-primary);
-      border-color: var(--accent-primary);
-    }}
-    .copy-btn svg {{
-      width: 1.25rem;
-      height: 1.25rem;
-    }}
-    .ip-version {{
-      display: inline-block;
-      background: var(--section-bg);
-      padding: 0.25rem 0.75rem;
-      border-radius: 999px;
-      font-size: 0.875rem;
-      color: var(--text-secondary);
-      margin-top: 0.5rem;
-    }}
-    .grid {{
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 1.5rem;
-      margin-bottom: 2rem;
-    }}
-    .card {{
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 1rem;
-      padding: 1.5rem;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-    }}
-    .card-title {{
-      font-size: 0.875rem;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--text-muted);
-      margin-bottom: 1rem;
-      font-weight: 600;
-    }}
-    .info-row {{
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      padding: 0.75rem 0;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.1);
-    }}
-    .info-row:last-child {{
-      border-bottom: none;
-    }}
-    .info-label {{
-      color: var(--text-secondary);
-      font-size: 0.9rem;
-      flex: 0 0 40%;
-    }}
-    .info-value {{
-      color: var(--text-primary);
-      font-size: 0.9rem;
-      text-align: right;
-      flex: 1;
-      font-weight: 500;
-      word-break: break-word;
-    }}
-    .info-value code {{
-      background: var(--section-bg);
-      padding: 0.125rem 0.375rem;
-      border-radius: 0.25rem;
-      font-family: "SF Mono", "Monaco", "Cascadia Code", monospace;
-      font-size: 0.85em;
-    }}
-    .badge {{
-      display: inline-block;
-      padding: 0.25rem 0.75rem;
-      border-radius: 999px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      background: var(--section-bg);
-      color: var(--text-secondary);
-    }}
-    .badge-success {{
-      background: rgba(34, 197, 94, 0.2);
-      color: var(--accent-primary);
-    }}
-    .badge-info {{
-      background: rgba(14, 165, 233, 0.2);
-      color: var(--accent-secondary);
-    }}
-    .footer {{
-      text-align: center;
-      padding: 2rem 0;
-      color: var(--text-muted);
-      font-size: 0.875rem;
-    }}
-    .footer a {{
-      color: var(--accent-secondary);
-      text-decoration: none;
-    }}
-    .footer a:hover {{
-      text-decoration: underline;
-    }}
-    .empty-state {{
-      color: var(--text-muted);
-      font-style: italic;
-      font-size: 0.9rem;
-    }}
-    @media (max-width: 768px) {{
-      .grid {{
-        grid-template-columns: 1fr;
-      }}
-      .ip-display {{
-        padding: 2rem 1.5rem;
-      }}
-      body {{
-        padding: 1rem 0.5rem;
-      }}
-    }}
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>CloakProbe</h1>
-      <p>Your network details and connection information</p>
-    </div>
+    // Extract Cloudflare Worker headers - Geo Location
+    let x_cf_country = headers
+        .get("X-CF-Country")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_city = headers
+        .get("X-CF-City")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_region = headers
+        .get("X-CF-Region")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_region_code = headers
+        .get("X-CF-Region-Code")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_continent = headers
+        .get("X-CF-Continent")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_latitude = headers
+        .get("X-CF-Latitude")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_longitude = headers
+        .get("X-CF-Longitude")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_postal_code = headers
+        .get("X-CF-Postal-Code")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_timezone = headers
+        .get("X-CF-Timezone")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
 
-    <div class="ip-display">
-      <div class="ip-label">Your Public IP Address</div>
-      <div class="ip-value-container">
-        <div class="ip-value" id="ip-value">{ip}</div>
-        <button class="copy-btn" onclick="copyIP()" title="Copy to clipboard">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-          </svg>
-        </button>
-      </div>
-      <div class="ip-version">IPv{ip_version} • <span class="badge badge-info">{ip_type}</span></div>
-    </div>
+    // Extract Cloudflare Worker headers - Network
+    let x_cf_asn = headers
+        .get("X-CF-ASN")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_as_organization = headers
+        .get("X-CF-AS-Organization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_colo = headers
+        .get("X-CF-Colo")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
 
-    <div class="grid">
-      <div class="card">
-        <div class="card-title">IP Address Details</div>
-        <div class="info-row">
-          <span class="info-label">Decimal Format</span>
-          <span class="info-value"><code>{ip_decimal}</code></span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Hexadecimal</span>
-          <span class="info-value"><code>{ip_hex}</code></span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Binary Format</span>
-          <span class="info-value"><code style="font-size: 0.75em;">{ip_binary}</code></span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Numeric Value</span>
-          <span class="info-value"><code>{ip_numeric}</code></span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Address Type</span>
-          <span class="info-value"><span class="badge badge-info">{ip_type}</span></span>
-        </div>
-      </div>
+    // Extract Cloudflare Worker headers - Connection
+    let x_cf_http_protocol = headers
+        .get("X-CF-HTTP-Protocol")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_tls_version = headers
+        .get("X-CF-TLS-Version")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_tls_cipher = headers
+        .get("X-CF-TLS-Cipher")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
 
-      <div class="card">
-        <div class="card-title">Network Information</div>
-        <div class="info-row">
-          <span class="info-label">ASN</span>
-          <span class="info-value">{asn}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">AS Name</span>
-          <span class="info-value">{as_name}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Network Prefix</span>
-          <span class="info-value"><code>{prefix}</code></span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">RIR</span>
-          <span class="info-value">{rir}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Country Code</span>
-          <span class="info-value">{country}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Organization</span>
-          <span class="info-value">{org_name}</span>
-        </div>
-      </div>
+    // Extract Cloudflare Worker headers - Security
+    let x_cf_trust_score = headers
+        .get("X-CF-Trust-Score")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_bot_score = headers
+        .get("X-CF-Bot-Score")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_verified_bot = headers
+        .get("X-CF-Verified-Bot")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
 
-      <div class="card">
-        <div class="card-title">Connection Details</div>
-        <div class="info-row">
-          <span class="info-label">TLS Version</span>
-          <span class="info-value">{tls_version}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">HTTP Protocol</span>
-          <span class="info-value"><code>{http_protocol}</code></span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">CF-Ray</span>
-          <span class="info-value"><code>{cf_ray}</code></span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Datacenter</span>
-          <span class="info-value">{datacenter}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">CF-Request-ID</span>
-          <span class="info-value"><code>{cf_request_id}</code></span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">CF-Cache-Status</span>
-          <span class="info-value">{cf_cache_status}</span>
-        </div>
-      </div>
+    // Initialize Tera template engine
+    let tera = match Tera::new("templates/**/*.tera") {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::error!("Failed to initialize Tera: {}", e);
+            return Response::builder()
+                .status(500)
+                .header("Content-Type", "text/plain")
+                .body(String::from("Internal server error"))
+                .unwrap();
+        }
+    };
 
-      <div class="card">
-        <div class="card-title">Cloudflare Headers</div>
-        <div class="info-row">
-          <span class="info-label">CF-Visitor</span>
-          <span class="info-value"><code>{cf_visitor}</code></span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">CF-IPCountry</span>
-          <span class="info-value">{cf_ipcountry}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">X-Forwarded-For</span>
-          <span class="info-value"><code>{x_forwarded_for}</code></span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">X-Real-IP</span>
-          <span class="info-value"><code>{x_real_ip}</code></span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">X-Forwarded-Proto</span>
-          <span class="info-value"><code>{x_forwarded_proto}</code></span>
-        </div>
-      </div>
+    // Build template context with sanitized header values
+    let mut context = Context::new();
+    
+    // IP information
+    context.insert("ip", &sanitize_header(Some(ip_display)));
+    context.insert("ip_version", &ip_version);
+    context.insert("ip_type", &ip_type);
+    context.insert("ip_decimal", &ip_decimal);
+    context.insert("ip_hex", &ip_hex);
+    context.insert("ip_binary", &ip_binary);
+    context.insert("ip_numeric", &ip_numeric);
 
-      <div class="card">
-        <div class="card-title">Client Information</div>
-        <div class="info-row">
-          <span class="info-label">User-Agent</span>
-          <span class="info-value"><code style="font-size: 0.8em;">{user_agent}</code></span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Accept-Language</span>
-          <span class="info-value">{accept_language}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Accept-Encoding</span>
-          <span class="info-value">{accept_encoding}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Sec-CH-UA</span>
-          <span class="info-value"><code>{sec_ch_ua}</code></span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Sec-CH-UA-Platform</span>
-          <span class="info-value"><code>{sec_ch_ua_platform}</code></span>
-        </div>
-      </div>
+    // Network information
+    context.insert("asn", &network.asn.map(|a| format!("AS{}", a)).unwrap_or_else(|| "—".to_string()));
+    context.insert("as_name", &network.as_name.as_ref().unwrap_or(&"—".to_string()));
+    context.insert("prefix", &network.prefix.as_deref().unwrap_or("—"));
+    context.insert("rir", &network.rir.as_ref().unwrap_or(&"—".to_string()));
+    context.insert("country", &network.country.as_deref().unwrap_or("—"));
+    context.insert("org_name", &network.org_name.as_deref().unwrap_or("—"));
 
-      <div class="card">
-        <div class="card-title">Server Information</div>
-        <div class="info-row">
-          <span class="info-label">Timestamp</span>
-          <span class="info-value"><code>{timestamp}</code></span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Version</span>
-          <span class="info-value">{version}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Region</span>
-          <span class="info-value">{region}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Privacy Mode</span>
-          <span class="info-value"><span class="badge badge-success">{privacy_mode}</span></span>
-        </div>
-      </div>
-    </div>
+    // Connection details - prioritize CF worker headers if available
+    let tls_version_display = x_cf_tls_version
+        .as_deref()
+        .filter(|v| *v != "—" && !v.is_empty())
+        .map(|v| sanitize_header(Some(v.to_string())))
+        .or_else(|| {
+            connection
+                .as_ref()
+                .and_then(|c| c.tls_version.as_ref())
+                .map(|v| sanitize_header(Some(v.clone())))
+        })
+        .unwrap_or_else(|| "—".to_string());
+    
+    let http_protocol_display = x_cf_http_protocol
+        .as_deref()
+        .filter(|v| *v != "—" && !v.is_empty())
+        .map(|v| sanitize_header(Some(v.to_string())))
+        .or_else(|| {
+            connection
+                .as_ref()
+                .and_then(|c| c.http_protocol.as_ref())
+                .map(|v| sanitize_header(Some(v.clone())))
+        })
+        .unwrap_or_else(|| "—".to_string());
+    
+    context.insert("tls_version", &tls_version_display);
+    context.insert("http_protocol", &http_protocol_display);
+    context.insert("tls_cipher", &sanitize_header(x_cf_tls_cipher.clone()));
+    context.insert("cf_ray", &connection.as_ref().and_then(|c| c.cf_ray.as_ref()).map(|v| sanitize_header(Some(v.clone()))).unwrap_or_else(|| "—".to_string()));
+    context.insert("datacenter", &connection.as_ref().and_then(|c| c.datacenter.as_ref()).map(|v| sanitize_header(Some(v.clone()))).unwrap_or_else(|| "—".to_string()));
+    // Only include CF-Request-ID and CF-Cache-Status if they have non-empty values
+    context.insert("cf_request_id", &sanitize_header(
+        cf_request_id.filter(|s| !s.is_empty())
+    ));
+    context.insert("cf_cache_status", &sanitize_header(
+        cf_cache_status.filter(|s| !s.is_empty())
+    ));
 
-    <div class="footer">
-      <p>API endpoints: <a href="/api/v1/info">JSON</a> | <a href="/api/v1/plain">Plain text</a> | <a href="/healthz">Health</a></p>
-      <p style="margin-top: 0.5rem;">No tracking • No ads • Privacy-focused</p>
-    </div>
-  </div>
-  <script>
-    function copyIP() {{
-      const ip = document.getElementById('ip-value').textContent;
-      navigator.clipboard.writeText(ip).then(function() {{
-        const btn = document.querySelector('.copy-btn');
-        btn.classList.add('copied');
-        setTimeout(function() {{
-          btn.classList.remove('copied');
-        }}, 1500);
-      }});
-    }}
-  </script>
-</body>
-</html>
-"#,
-        ip = ip_display,
-        ip_version = ip_version,
-        ip_type = ip_type,
-        ip_decimal = ip_decimal,
-        ip_hex = ip_hex,
-        ip_binary = ip_binary,
-        ip_numeric = ip_numeric,
-        asn = network
-            .asn
-            .map(|a| format!("AS{}", a))
-            .unwrap_or_else(|| "—".to_string()),
-        as_name = network.as_name.as_ref().unwrap_or(&"—".to_string()),
-        prefix = network.prefix.as_deref().unwrap_or("—"),
-        rir = network.rir.as_ref().unwrap_or(&"—".to_string()),
-        country = network.country.as_deref().unwrap_or("—"),
-        org_name = network.org_name.as_deref().unwrap_or("—"),
-        tls_version = connection
-            .as_ref()
-            .and_then(|c| c.tls_version.as_ref())
-            .map(|v| v.as_str())
-            .unwrap_or("—"),
-        http_protocol = connection
-            .as_ref()
-            .and_then(|c| c.http_protocol.as_ref())
-            .map(|v| v.as_str())
-            .unwrap_or("—"),
-        cf_ray = connection
-            .as_ref()
-            .and_then(|c| c.cf_ray.as_ref())
-            .map(|v| v.as_str())
-            .unwrap_or("—"),
-        datacenter = connection
-            .as_ref()
-            .and_then(|c| c.datacenter.as_ref())
-            .map(|v| v.as_str())
-            .unwrap_or("—"),
-        cf_request_id = cf_request_id.as_deref().unwrap_or("—"),
-        cf_cache_status = cf_cache_status.as_deref().unwrap_or("—"),
-        cf_visitor = cf_visitor.as_deref().unwrap_or("—"),
-        cf_ipcountry = cf_ipcountry.as_deref().unwrap_or("—"),
-        x_forwarded_for = x_forwarded_for.as_deref().unwrap_or("—"),
-        x_real_ip = x_real_ip.as_deref().unwrap_or("—"),
-        x_forwarded_proto = x_forwarded_proto.as_deref().unwrap_or("—"),
-        user_agent = client.user_agent.as_deref().unwrap_or("—"),
-        accept_language = client.accept_language.as_deref().unwrap_or("—"),
-        accept_encoding = client.accept_encoding.as_deref().unwrap_or("—"),
-        sec_ch_ua = client.client_hints.sec_ch_ua.as_deref().unwrap_or("—"),
-        sec_ch_ua_platform = client
-            .client_hints
-            .sec_ch_ua_platform
-            .as_deref()
-            .unwrap_or("—"),
-        timestamp = server.timestamp_utc,
-        version = server.version,
-        region = server.region.as_deref().unwrap_or("—"),
-        privacy_mode = privacy.mode,
-    );
+    // Build Cloudflare Headers sections with sanitized values
+    #[derive(serde::Serialize)]
+    struct HeaderItem {
+        label: String,
+        value: String,
+    }
+
+    let mut geo_location_items = Vec::new();
+    if cf_ipcountry.as_deref().unwrap_or("—") != "—" {
+        geo_location_items.push(HeaderItem {
+            label: "CF-IPCountry".to_string(),
+            value: sanitize_header(cf_ipcountry.clone()),
+        });
+    }
+    if x_cf_country.as_deref().unwrap_or("—") != "—" {
+        geo_location_items.push(HeaderItem {
+            label: "Country".to_string(),
+            value: sanitize_header(x_cf_country.clone()),
+        });
+    }
+    if x_cf_city.as_deref().unwrap_or("—") != "—" {
+        geo_location_items.push(HeaderItem {
+            label: "City".to_string(),
+            value: sanitize_header(x_cf_city.clone()),
+        });
+    }
+    if x_cf_region.as_deref().unwrap_or("—") != "—" {
+        geo_location_items.push(HeaderItem {
+            label: "Region".to_string(),
+            value: sanitize_header(x_cf_region.clone()),
+        });
+    }
+    if x_cf_region_code.as_deref().unwrap_or("—") != "—" {
+        geo_location_items.push(HeaderItem {
+            label: "Region-Code".to_string(),
+            value: sanitize_header(x_cf_region_code.clone()),
+        });
+    }
+    if x_cf_continent.as_deref().unwrap_or("—") != "—" {
+        geo_location_items.push(HeaderItem {
+            label: "Continent".to_string(),
+            value: sanitize_header(x_cf_continent.clone()),
+        });
+    }
+    if x_cf_latitude.as_deref().unwrap_or("—") != "—" {
+        geo_location_items.push(HeaderItem {
+            label: "Latitude".to_string(),
+            value: sanitize_header(x_cf_latitude.clone()),
+        });
+    }
+    if x_cf_longitude.as_deref().unwrap_or("—") != "—" {
+        geo_location_items.push(HeaderItem {
+            label: "Longitude".to_string(),
+            value: sanitize_header(x_cf_longitude.clone()),
+        });
+    }
+    if x_cf_postal_code.as_deref().unwrap_or("—") != "—" {
+        geo_location_items.push(HeaderItem {
+            label: "Postal-Code".to_string(),
+            value: sanitize_header(x_cf_postal_code.clone()),
+        });
+    }
+    if x_cf_timezone.as_deref().unwrap_or("—") != "—" {
+        geo_location_items.push(HeaderItem {
+            label: "Timezone".to_string(),
+            value: sanitize_header(x_cf_timezone.clone()),
+        });
+    }
+    context.insert("geo_location_items", &geo_location_items);
+
+    let mut network_items = Vec::new();
+    if x_cf_asn.as_deref().unwrap_or("—") != "—" {
+        network_items.push(HeaderItem {
+            label: "ASN".to_string(),
+            value: sanitize_header(x_cf_asn.clone()),
+        });
+    }
+    if x_cf_as_organization.as_deref().unwrap_or("—") != "—" {
+        network_items.push(HeaderItem {
+            label: "AS-Organization".to_string(),
+            value: sanitize_header(x_cf_as_organization.clone()),
+        });
+    }
+    if x_cf_colo.as_deref().unwrap_or("—") != "—" {
+        network_items.push(HeaderItem {
+            label: "Colo".to_string(),
+            value: sanitize_header(x_cf_colo.clone()),
+        });
+    }
+    context.insert("network_items", &network_items);
+
+    let mut connection_items = Vec::new();
+    if cf_visitor.as_deref().unwrap_or("—") != "—" {
+        connection_items.push(HeaderItem {
+            label: "CF-Visitor".to_string(),
+            value: sanitize_header(cf_visitor.clone()),
+        });
+    }
+    if x_forwarded_proto.as_deref().unwrap_or("—") != "—" {
+        connection_items.push(HeaderItem {
+            label: "X-Forwarded-Proto".to_string(),
+            value: sanitize_header(x_forwarded_proto.clone()),
+        });
+    }
+    if x_cf_http_protocol.as_deref().unwrap_or("—") != "—" {
+        connection_items.push(HeaderItem {
+            label: "HTTP-Protocol".to_string(),
+            value: sanitize_header(x_cf_http_protocol.clone()),
+        });
+    }
+    if x_cf_tls_version.as_deref().unwrap_or("—") != "—" {
+        connection_items.push(HeaderItem {
+            label: "TLS-Version".to_string(),
+            value: sanitize_header(x_cf_tls_version.clone()),
+        });
+    }
+    if x_cf_tls_cipher.as_deref().unwrap_or("—") != "—" {
+        connection_items.push(HeaderItem {
+            label: "TLS-Cipher".to_string(),
+            value: sanitize_header(x_cf_tls_cipher.clone()),
+        });
+    }
+    context.insert("connection_items", &connection_items);
+
+    let mut security_items = Vec::new();
+    if x_cf_trust_score.as_deref().unwrap_or("—") != "—" {
+        security_items.push(HeaderItem {
+            label: "Trust-Score".to_string(),
+            value: sanitize_header(x_cf_trust_score.clone()),
+        });
+    }
+    if x_cf_bot_score.as_deref().unwrap_or("—") != "—" {
+        security_items.push(HeaderItem {
+            label: "Bot-Score".to_string(),
+            value: sanitize_header(x_cf_bot_score.clone()),
+        });
+    }
+    if x_cf_verified_bot.as_deref().unwrap_or("—") != "—" {
+        security_items.push(HeaderItem {
+            label: "Verified-Bot".to_string(),
+            value: sanitize_header(x_cf_verified_bot.clone()),
+        });
+    }
+    context.insert("security_items", &security_items);
+
+    let mut proxy_items = Vec::new();
+    if x_forwarded_for.as_deref().unwrap_or("—") != "—" {
+        proxy_items.push(HeaderItem {
+            label: "X-Forwarded-For".to_string(),
+            value: sanitize_header(x_forwarded_for.clone()),
+        });
+    }
+    if x_real_ip.as_deref().unwrap_or("—") != "—" {
+        proxy_items.push(HeaderItem {
+            label: "X-Real-IP".to_string(),
+            value: sanitize_header(x_real_ip.clone()),
+        });
+    }
+    context.insert("proxy_items", &proxy_items);
+
+    // Client information
+    context.insert("user_agent", &sanitize_header(client.user_agent.clone()));
+    context.insert("accept_language", &sanitize_header(client.accept_language.clone()));
+    context.insert("accept_encoding", &sanitize_header(client.accept_encoding.clone()));
+    context.insert("sec_ch_ua", &sanitize_header(client.client_hints.sec_ch_ua.clone()));
+    context.insert("sec_ch_ua_platform", &sanitize_header(client.client_hints.sec_ch_ua_platform.clone()));
+
+    // Server information
+    context.insert("timestamp", &server.timestamp_utc);
+    context.insert("version", &server.version);
+    context.insert("region", &server.region.as_deref().unwrap_or("—"));
+    context.insert("privacy_mode", &privacy.mode);
+
+    // Render template
+    let html = match tera.render("index.html.tera", &context) {
+        Ok(h) => h,
+        Err(e) => {
+            tracing::error!("Failed to render template: {}", e);
+            return Response::builder()
+                .status(500)
+                .header("Content-Type", "text/plain")
+                .body(String::from("Internal server error"))
+                .unwrap();
+        }
+    };
+
+    Response::builder()
+        .header("Content-Type", "text/html; charset=utf-8")
+        .body(html)
+        .unwrap()
+}
+
+pub async fn privacy_handler() -> impl IntoResponse {
+    // Initialize Tera template engine
+    let tera = match Tera::new("templates/**/*.tera") {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::error!("Failed to initialize Tera: {}", e);
+            return Response::builder()
+                .status(500)
+                .header("Content-Type", "text/plain")
+                .body(String::from("Internal server error"))
+                .unwrap();
+        }
+    };
+
+    // Render privacy policy template
+    let html = match tera.render("privacy.html.tera", &Context::new()) {
+        Ok(h) => h,
+        Err(e) => {
+            tracing::error!("Failed to render privacy policy template: {}", e);
+            return Response::builder()
+                .status(500)
+                .header("Content-Type", "text/plain")
+                .body(String::from("Internal server error"))
+                .unwrap();
+        }
+    };
 
     Response::builder()
         .header("Content-Type", "text/html; charset=utf-8")
@@ -732,6 +892,114 @@ pub async fn plain_handler(
     let ctx = extract_client_context(&headers).map_err(|e| AppError::Cf(e.to_string()))?;
 
     let asn_info = state.asn_db.lookup(ctx.ip);
+
+    // Extract Cloudflare Worker headers
+    let x_cf_http_protocol = headers
+        .get("X-CF-HTTP-Protocol")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_tls_version = headers
+        .get("X-CF-TLS-Version")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_tls_cipher = headers
+        .get("X-CF-TLS-Cipher")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let cf_visitor = headers
+        .get("CF-Visitor")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let cf_ipcountry = headers
+        .get("CF-IPCountry")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let cf_request_id = headers
+        .get("CF-Request-ID")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let cf_cache_status = headers
+        .get("CF-Cache-Status")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_forwarded_for = headers
+        .get("X-Forwarded-For")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_real_ip = headers
+        .get("X-Real-IP")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_forwarded_proto = headers
+        .get("X-Forwarded-Proto")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    // Extract Cloudflare Worker headers - Geo Location
+    let x_cf_country = headers
+        .get("X-CF-Country")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_city = headers
+        .get("X-CF-City")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_region = headers
+        .get("X-CF-Region")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_region_code = headers
+        .get("X-CF-Region-Code")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_continent = headers
+        .get("X-CF-Continent")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_latitude = headers
+        .get("X-CF-Latitude")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_longitude = headers
+        .get("X-CF-Longitude")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_postal_code = headers
+        .get("X-CF-Postal-Code")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_timezone = headers
+        .get("X-CF-Timezone")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    // Extract Cloudflare Worker headers - Network
+    let x_cf_asn = headers
+        .get("X-CF-ASN")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_as_organization = headers
+        .get("X-CF-AS-Organization")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_colo = headers
+        .get("X-CF-Colo")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    // Extract Cloudflare Worker headers - Security
+    let x_cf_trust_score = headers
+        .get("X-CF-Trust-Score")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_bot_score = headers
+        .get("X-CF-Bot-Score")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let x_cf_verified_bot = headers
+        .get("X-CF-Verified-Bot")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
 
     let mut out = String::new();
     use std::fmt::Write;
@@ -751,13 +1019,153 @@ pub async fn plain_handler(
         .ok();
     }
 
-    if let Some(tls) = ctx.tls_version {
-        let proto = ctx.http_protocol.unwrap_or_else(|| "-".into());
+    // Connection details - prioritize CF worker headers
+    let tls_version = x_cf_tls_version
+        .as_ref()
+        .filter(|v| !v.is_empty())
+        .or(ctx.tls_version.as_ref());
+    let http_protocol = x_cf_http_protocol
+        .as_ref()
+        .filter(|v| !v.is_empty())
+        .or(ctx.http_protocol.as_ref());
+
+    if let Some(tls) = tls_version {
+        let proto = http_protocol.map(|s| s.as_str()).unwrap_or("-");
         writeln!(&mut out, "TLS: {} over {}", tls, proto).ok();
     }
 
+    if let Some(cipher) = x_cf_tls_cipher.as_ref() {
+        if !cipher.is_empty() {
+            writeln!(&mut out, "TLS-Cipher: {}", cipher).ok();
+        }
+    }
+
+    if let Some(ray) = ctx.cf_ray.as_ref() {
+        writeln!(&mut out, "CF-Ray: {}", ray).ok();
+    }
+
+    if let Some(dc) = ctx.cf_datacenter.as_ref() {
+        writeln!(&mut out, "Datacenter: {}", dc).ok();
+    }
+
+    if let Some(req_id) = cf_request_id.as_ref() {
+        writeln!(&mut out, "CF-Request-ID: {}", req_id).ok();
+    }
+
+    if let Some(cache) = cf_cache_status.as_ref() {
+        writeln!(&mut out, "CF-Cache-Status: {}", cache).ok();
+    }
+
+    // Cloudflare Headers - Geo Location
+    if cf_ipcountry.is_some() || x_cf_country.is_some() || x_cf_city.is_some() {
+        writeln!(&mut out, "\n=== Cloudflare Client Info ===").ok();
+        writeln!(&mut out, "--- Geo Location ---").ok();
+        if let Some(c) = cf_ipcountry.as_ref() {
+            writeln!(&mut out, "Country: {}", c).ok();
+        }
+        if let Some(c) = x_cf_country.as_ref() {
+            writeln!(&mut out, "Country: {}", c).ok();
+        }
+        if let Some(c) = x_cf_city.as_ref() {
+            writeln!(&mut out, "City: {}", c).ok();
+        }
+        if let Some(c) = x_cf_region.as_ref() {
+            writeln!(&mut out, "Region: {}", c).ok();
+        }
+        if let Some(c) = x_cf_region_code.as_ref() {
+            writeln!(&mut out, "Region-Code: {}", c).ok();
+        }
+        if let Some(c) = x_cf_continent.as_ref() {
+            writeln!(&mut out, "Continent: {}", c).ok();
+        }
+        if let Some(c) = x_cf_latitude.as_ref() {
+            writeln!(&mut out, "Latitude: {}", c).ok();
+        }
+        if let Some(c) = x_cf_longitude.as_ref() {
+            writeln!(&mut out, "Longitude: {}", c).ok();
+        }
+        if let Some(c) = x_cf_postal_code.as_ref() {
+            writeln!(&mut out, "Postal-Code: {}", c).ok();
+        }
+        if let Some(c) = x_cf_timezone.as_ref() {
+            writeln!(&mut out, "Timezone: {}", c).ok();
+        }
+    }
+
+    // Network
+    if x_cf_asn.is_some() || x_cf_as_organization.is_some() || x_cf_colo.is_some() {
+        writeln!(&mut out, "--- Network ---").ok();
+        if let Some(a) = x_cf_asn.as_ref() {
+            writeln!(&mut out, "ASN: {}", a).ok();
+        }
+        if let Some(a) = x_cf_as_organization.as_ref() {
+            writeln!(&mut out, "AS-Organization: {}", a).ok();
+        }
+        if let Some(c) = x_cf_colo.as_ref() {
+            writeln!(&mut out, "Colo: {}", c).ok();
+        }
+    }
+
+    // Connection
+    if cf_visitor.is_some() || x_forwarded_proto.is_some() || x_cf_http_protocol.is_some() {
+        writeln!(&mut out, "--- Connection ---").ok();
+        if let Some(v) = cf_visitor.as_ref() {
+            writeln!(&mut out, "CF-Visitor: {}", v).ok();
+        }
+        if let Some(p) = x_forwarded_proto.as_ref() {
+            writeln!(&mut out, "X-Forwarded-Proto: {}", p).ok();
+        }
+        if let Some(p) = x_cf_http_protocol.as_ref() {
+            writeln!(&mut out, "HTTP-Protocol: {}", p).ok();
+        }
+        if let Some(t) = x_cf_tls_version.as_ref() {
+            writeln!(&mut out, "TLS-Version: {}", t).ok();
+        }
+        if let Some(c) = x_cf_tls_cipher.as_ref() {
+            writeln!(&mut out, "TLS-Cipher: {}", c).ok();
+        }
+    }
+
+    // Security
+    if x_cf_trust_score.is_some() || x_cf_bot_score.is_some() || x_cf_verified_bot.is_some() {
+        writeln!(&mut out, "--- Security ---").ok();
+        if let Some(s) = x_cf_trust_score.as_ref() {
+            writeln!(&mut out, "Trust-Score: {}", s).ok();
+        }
+        if let Some(s) = x_cf_bot_score.as_ref() {
+            writeln!(&mut out, "Bot-Score: {}", s).ok();
+        }
+        if let Some(s) = x_cf_verified_bot.as_ref() {
+            writeln!(&mut out, "Verified-Bot: {}", s).ok();
+        }
+    }
+
+    // Proxy Headers
+    if x_forwarded_for.is_some() || x_real_ip.is_some() {
+        writeln!(&mut out, "--- Proxy Headers ---").ok();
+        if let Some(f) = x_forwarded_for.as_ref() {
+            writeln!(&mut out, "X-Forwarded-For: {}", f).ok();
+        }
+        if let Some(r) = x_real_ip.as_ref() {
+            writeln!(&mut out, "X-Real-IP: {}", r).ok();
+        }
+    }
+
+    // Client information
     if let Some(ua) = headers.get("User-Agent").and_then(|v| v.to_str().ok()) {
-        writeln!(&mut out, "User-Agent: {}", ua).ok();
+        writeln!(&mut out, "\nUser-Agent: {}", ua).ok();
+    }
+    if let Some(lang) = headers.get("Accept-Language").and_then(|v| v.to_str().ok()) {
+        writeln!(&mut out, "Accept-Language: {}", lang).ok();
+    }
+    if let Some(enc) = headers.get("Accept-Encoding").and_then(|v| v.to_str().ok()) {
+        writeln!(&mut out, "Accept-Encoding: {}", enc).ok();
+    }
+    if let Some(sec_ch_ua) = headers.get("Sec-CH-UA").and_then(|v| v.to_str().ok()) {
+        writeln!(&mut out, "Sec-CH-UA: {}", sec_ch_ua).ok();
+    }
+    if let Some(sec_ch_ua_platform) = headers.get("Sec-CH-UA-Platform").and_then(|v| v.to_str().ok()) {
+        writeln!(&mut out, "Sec-CH-UA-Platform: {}", sec_ch_ua_platform).ok();
     }
 
     Ok(out)

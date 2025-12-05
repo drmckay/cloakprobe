@@ -9,7 +9,7 @@ mod security_headers;
 use asn::load_asn_db;
 use axum::{routing::get, Router};
 use config::AppConfig;
-use handlers::{health_handler, html_handler, info_handler, plain_handler};
+use handlers::{health_handler, html_handler, info_handler, plain_handler, privacy_handler};
 use security_headers::security_headers_layer;
 use std::sync::Arc;
 use tower_http::trace::TraceLayer;
@@ -43,6 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Build router with all routes and middleware
     let app = Router::new()
         .route("/", get(html_handler))
+        .route("/privacy", get(privacy_handler))
         .route("/api/v1/info", get(info_handler))
         .route("/api/v1/plain", get(plain_handler))
         .route("/healthz", get(health_handler))

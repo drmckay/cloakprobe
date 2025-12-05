@@ -1,0 +1,672 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>CloakProbe - {{ ip }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="CloakProbe - Your IP address and network information">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    :root {
+      color-scheme: dark;
+      --bg-gradient-start: #0f172a;
+      --bg-gradient-end: #020617;
+      --card-bg: rgba(15, 23, 42, 0.95);
+      --card-border: rgba(148, 163, 184, 0.2);
+      --text-primary: #f9fafb;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-primary: #22c55e;
+      --accent-secondary: #0ea5e9;
+      --accent-gradient: linear-gradient(135deg, #22c55e, #0ea5e9);
+      --section-bg: rgba(30, 41, 59, 0.5);
+    }
+    body {
+      background: radial-gradient(ellipse at top, var(--bg-gradient-start), var(--bg-gradient-end));
+      color: var(--text-primary);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+    .header h1 {
+      font-size: clamp(2rem, 5vw, 3rem);
+      font-weight: 800;
+      background: var(--accent-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.5rem;
+    }
+    .header p {
+      color: var(--text-secondary);
+      font-size: 1.1rem;
+    }
+    .ip-display {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 1.5rem;
+      padding: 3rem 2rem;
+      text-align: center;
+      margin-bottom: 2rem;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+    .ip-label {
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+      font-weight: 600;
+    }
+    .ip-value-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      margin-bottom: 0.5rem;
+    }
+    .ip-value {
+      font-size: clamp(2.5rem, 6vw, 4rem);
+      font-weight: 700;
+      font-family: "SF Mono", "Monaco", "Cascadia Code", monospace;
+    }
+    .copy-btn {
+      background: var(--section-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 0.5rem;
+      padding: 0.5rem;
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .copy-btn:hover {
+      background: var(--card-border);
+      color: var(--text-primary);
+    }
+    .copy-btn:active {
+      transform: scale(0.95);
+    }
+    .copy-btn.copied {
+      background: rgba(34, 197, 94, 0.2);
+      color: var(--accent-primary);
+      border-color: var(--accent-primary);
+    }
+    .copy-btn svg {
+      width: 1.25rem;
+      height: 1.25rem;
+    }
+    .ip-version {
+      display: inline-block;
+      background: var(--section-bg);
+      padding: 0.25rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      margin-top: 0.5rem;
+    }
+    .reverse-dns-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .reverse-dns-btn {
+      background: var(--section-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 0.5rem;
+      padding: 0.5rem 1rem;
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+    .reverse-dns-btn:hover:not(:disabled) {
+      background: var(--card-border);
+      color: var(--text-primary);
+    }
+    .reverse-dns-btn:active:not(:disabled) {
+      transform: scale(0.95);
+    }
+    .reverse-dns-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .reverse-dns-btn.loading {
+      position: relative;
+    }
+    .reverse-dns-btn svg {
+      width: 1rem;
+      height: 1rem;
+    }
+    .spinner {
+      display: inline-block;
+      width: 1rem;
+      height: 1rem;
+      border: 2px solid var(--card-border);
+      border-top-color: var(--accent-secondary);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 1rem;
+      padding: 1.5rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    }
+    .card-title {
+      font-size: 0.875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+      font-weight: 600;
+    }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+    }
+    .info-row:last-child {
+      border-bottom: none;
+    }
+    .info-label {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      flex: 0 0 40%;
+    }
+    .info-value {
+      color: var(--text-primary);
+      font-size: 0.9rem;
+      text-align: right;
+      flex: 1;
+      font-weight: 500;
+      word-break: break-word;
+    }
+    .info-value code {
+      background: var(--section-bg);
+      padding: 0.125rem 0.375rem;
+      border-radius: 0.25rem;
+      font-family: "SF Mono", "Monaco", "Cascadia Code", monospace;
+      font-size: 0.85em;
+    }
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: var(--section-bg);
+      color: var(--text-secondary);
+    }
+    .badge-success {
+      background: rgba(34, 197, 94, 0.2);
+      color: var(--accent-primary);
+    }
+    .badge-info {
+      background: rgba(14, 165, 233, 0.2);
+      color: var(--accent-secondary);
+    }
+    .footer {
+      text-align: center;
+      padding: 2rem 0;
+      color: var(--text-muted);
+      font-size: 0.875rem;
+    }
+    .footer a {
+      color: var(--accent-secondary);
+      text-decoration: none;
+    }
+    .footer a:hover {
+      text-decoration: underline;
+    }
+    .empty-state {
+      color: var(--text-muted);
+      font-style: italic;
+      font-size: 0.9rem;
+    }
+    @media (max-width: 768px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+      .ip-display {
+        padding: 2rem 1.5rem;
+      }
+      body {
+        padding: 1rem 0.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>CloakProbe</h1>
+      <p>Your network details and connection information</p>
+      <div style="margin-top: 1rem; display: flex; gap: 1rem; justify-content: center; align-items: center; flex-wrap: wrap;">
+        <a href="https://cloakprobe.dev" style="color: var(--accent-secondary); text-decoration: none; font-size: 0.9rem; display: flex; align-items: center; gap: 0.5rem;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+            <polyline points="9 22 9 12 15 12 15 22"></polyline>
+          </svg>
+          cloakprobe.dev
+        </a>
+        <span style="color: var(--text-muted);">•</span>
+        <a href="https://github.com/drmckay/cloakprobe" target="_blank" rel="noopener noreferrer" style="color: var(--accent-secondary); text-decoration: none; font-size: 0.9rem; display: flex; align-items: center; gap: 0.5rem;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+          </svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+
+    <div class="ip-display">
+      <div class="ip-label">Your Public IP Address</div>
+      <div class="ip-value-container">
+        <div class="ip-value" id="ip-value">{{ ip }}</div>
+        <button class="copy-btn" onclick="copyIP()" title="Copy to clipboard">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+        </button>
+      </div>
+      <div class="ip-version">IPv{{ ip_version }} • <span class="badge badge-info">{{ ip_type }}</span></div>
+      <div class="reverse-dns-container" style="margin-top: 1.5rem;">
+        <button class="reverse-dns-btn" id="reverse-dns-btn" onclick="lookupReverseDNS()" title="Lookup reverse DNS (PTR record)">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <span id="reverse-dns-btn-text">Lookup Reverse DNS</span>
+        </button>
+      </div>
+      <div id="reverse-dns-result-container" style="display: none; margin-top: 1.5rem;">
+        <div class="ip-label">Reverse DNS (PTR)</div>
+        <div class="ip-value-container">
+          <div class="ip-value" id="reverse-dns-value" style="font-size: clamp(1.5rem, 4vw, 2.5rem);"></div>
+          <button class="copy-btn" id="reverse-dns-copy-btn" onclick="copyHostname()" title="Copy to clipboard" style="display: none;">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="card-title">IP Address Details</div>
+        <div class="info-row">
+          <span class="info-label">Decimal Format</span>
+          <span class="info-value"><code>{{ ip_decimal }}</code></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Hexadecimal</span>
+          <span class="info-value"><code>{{ ip_hex }}</code></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Binary Format</span>
+          <span class="info-value"><code style="font-size: 0.75em;">{{ ip_binary }}</code></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Numeric Value</span>
+          <span class="info-value"><code>{{ ip_numeric }}</code></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Address Type</span>
+          <span class="info-value"><span class="badge badge-info">{{ ip_type }}</span></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Network Information</div>
+        <div class="info-row">
+          <span class="info-label">ASN</span>
+          <span class="info-value"><code>{{ asn }}</code></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">AS Name</span>
+          <span class="info-value"><code>{{ as_name }}</code></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Network Prefix</span>
+          <span class="info-value"><code>{{ prefix }}</code></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">RIR</span>
+          <span class="info-value"><code>{{ rir }}</code></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Country Code</span>
+          <span class="info-value"><code>{{ country }}</code></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Organization</span>
+          <span class="info-value"><code>{{ org_name }}</code></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Connection Details</div>
+        <div class="info-row">
+          <span class="info-label">TLS Version</span>
+          <span class="info-value"><code>{{ tls_version }}</code></span>
+        </div>
+        {% if tls_cipher != "—" %}
+        <div class="info-row">
+          <span class="info-label">TLS Cipher</span>
+          <span class="info-value"><code>{{ tls_cipher }}</code></span>
+        </div>
+        {% endif %}
+        <div class="info-row">
+          <span class="info-label">HTTP Protocol</span>
+          <span class="info-value"><code>{{ http_protocol }}</code></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">CF-Ray</span>
+          <span class="info-value"><code>{{ cf_ray }}</code></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Datacenter</span>
+          <span class="info-value"><code>{{ datacenter }}</code></span>
+        </div>
+        {% if cf_request_id != "—" %}
+        <div class="info-row">
+          <span class="info-label">CF-Request-ID</span>
+          <span class="info-value"><code>{{ cf_request_id }}</code></span>
+        </div>
+        {% endif %}
+        {% if cf_cache_status != "—" %}
+        <div class="info-row">
+          <span class="info-label">CF-Cache-Status</span>
+          <span class="info-value"><code>{{ cf_cache_status }}</code></span>
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="card">
+        <div class="card-title">Cloudflare Headers</div>
+        {% if geo_location_items %}
+        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(148, 163, 184, 0.2);">
+          <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 0.75rem; font-weight: 600;">--- Geo Location ---</div>
+          {% for item in geo_location_items %}
+          <div class="info-row">
+            <span class="info-label">{{ item.label }}</span>
+            <span class="info-value"><code>{{ item.value }}</code></span>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if network_items %}
+        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(148, 163, 184, 0.2);">
+          <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 0.75rem; font-weight: 600;">--- Network ---</div>
+          {% for item in network_items %}
+          <div class="info-row">
+            <span class="info-label">{{ item.label }}</span>
+            <span class="info-value"><code>{{ item.value }}</code></span>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if connection_items %}
+        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(148, 163, 184, 0.2);">
+          <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 0.75rem; font-weight: 600;">--- Connection ---</div>
+          {% for item in connection_items %}
+          <div class="info-row">
+            <span class="info-label">{{ item.label }}</span>
+            <span class="info-value"><code>{{ item.value }}</code></span>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if security_items %}
+        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(148, 163, 184, 0.2);">
+          <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 0.75rem; font-weight: 600;">--- Security ---</div>
+          {% for item in security_items %}
+          <div class="info-row">
+            <span class="info-label">{{ item.label }}</span>
+            <span class="info-value"><code>{{ item.value }}</code></span>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if proxy_items %}
+        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(148, 163, 184, 0.2);">
+          <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 0.75rem; font-weight: 600;">--- Proxy Headers ---</div>
+          {% for item in proxy_items %}
+          <div class="info-row">
+            <span class="info-label">{{ item.label }}</span>
+            <span class="info-value"><code>{{ item.value }}</code></span>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="card">
+        <div class="card-title">Client Information</div>
+        <div class="info-row">
+          <span class="info-label">User-Agent</span>
+          <span class="info-value"><code style="font-size: 0.8em;">{{ user_agent }}</code></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Accept-Language</span>
+          <span class="info-value"><code>{{ accept_language }}</code></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Accept-Encoding</span>
+          <span class="info-value"><code>{{ accept_encoding }}</code></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Sec-CH-UA</span>
+          <span class="info-value"><code>{{ sec_ch_ua }}</code></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Sec-CH-UA-Platform</span>
+          <span class="info-value"><code>{{ sec_ch_ua_platform }}</code></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Server Information</div>
+        <div class="info-row">
+          <span class="info-label">Timestamp</span>
+          <span class="info-value"><code>{{ timestamp }}</code></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Version</span>
+          <span class="info-value"><code>{{ version }}</code></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Region</span>
+          <span class="info-value"><code>{{ region }}</code></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Privacy Mode</span>
+          <span class="info-value"><span class="badge badge-success">{{ privacy_mode }}</span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>API endpoints: <a href="/api/v1/info">JSON</a> | <a href="/api/v1/plain">Plain text</a> | <a href="/healthz">Health</a></p>
+      <p style="margin-top: 0.5rem;">No tracking • No ads • Privacy-focused</p>
+      <p style="margin-top: 1rem;">
+        <a href="/privacy" style="color: var(--accent-secondary); text-decoration: none;">Privacy Policy</a>
+        <span style="color: var(--text-muted); margin: 0 0.75rem;">•</span>
+        <a href="https://cloakprobe.dev" style="color: var(--accent-secondary); text-decoration: none;">← Back to cloakprobe.dev</a>
+        <span style="color: var(--text-muted); margin: 0 0.75rem;">•</span>
+        <a href="https://github.com/drmckay/cloakprobe" target="_blank" rel="noopener noreferrer" style="color: var(--accent-secondary); text-decoration: none;">View on GitHub</a>
+      </p>
+    </div>
+  </div>
+  <script>
+    function copyIP() {
+      const ip = document.getElementById('ip-value').textContent;
+      navigator.clipboard.writeText(ip).then(function() {
+        const btn = document.querySelector('.copy-btn');
+        btn.classList.add('copied');
+        setTimeout(function() {
+          btn.classList.remove('copied');
+        }, 1500);
+      });
+    }
+
+    // Convert IP address to reverse DNS format
+    function ipToReverseDNS(ip) {
+      // Check if IPv4 or IPv6
+      if (ip.includes('.')) {
+        // IPv4: Reverse octets and append .in-addr.arpa
+        const parts = ip.split('.').reverse();
+        return parts.join('.') + '.in-addr.arpa';
+      } else if (ip.includes(':')) {
+        // IPv6: Expand, reverse hex digits, append .ip6.arpa
+        // Expand IPv6 to full form
+        const expandIPv6 = (ip) => {
+          const parts = ip.split('::');
+          if (parts.length === 2) {
+            const left = parts[0].split(':').filter(p => p);
+            const right = parts[1].split(':').filter(p => p);
+            const missing = 8 - left.length - right.length;
+            const zeros = Array(missing).fill('0');
+            return [...left, ...zeros, ...right].map(p => p.padStart(4, '0'));
+          } else {
+            return ip.split(':').map(p => p.padStart(4, '0'));
+          }
+        };
+        
+        const expanded = expandIPv6(ip);
+        // Reverse each hex digit in each segment
+        const reversed = expanded
+          .join('')
+          .split('')
+          .reverse()
+          .join('.');
+        return reversed + '.ip6.arpa';
+      }
+      return null;
+    }
+
+    async function lookupReverseDNS() {
+      const ip = document.getElementById('ip-value').textContent.trim();
+      const btn = document.getElementById('reverse-dns-btn');
+      const btnText = document.getElementById('reverse-dns-btn-text');
+      const resultContainer = document.getElementById('reverse-dns-result-container');
+      const resultValue = document.getElementById('reverse-dns-value');
+      const copyBtn = document.getElementById('reverse-dns-copy-btn');
+      
+      // Disable button and show loading
+      btn.disabled = true;
+      btn.classList.add('loading');
+      btnText.innerHTML = '<span class="spinner"></span> Looking up...';
+      resultContainer.style.display = 'none';
+      copyBtn.style.display = 'none';
+      
+      try {
+        // Convert IP to reverse DNS format
+        const reverseDNS = ipToReverseDNS(ip);
+        if (!reverseDNS) {
+          throw new Error('Invalid IP address format');
+        }
+        
+        // Query Cloudflare DoH API
+        const dohUrl = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(reverseDNS)}&type=PTR`;
+        const response = await fetch(dohUrl, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/dns-json'
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`DNS query failed: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // Check if we have an answer
+        if (data.Answer && data.Answer.length > 0) {
+          const hostname = data.Answer[0].data;
+          resultValue.textContent = hostname;
+          resultValue.setAttribute('data-hostname', hostname);
+          copyBtn.style.display = 'flex';
+          resultContainer.style.display = 'block';
+        } else {
+          resultValue.textContent = 'No reverse DNS record found';
+          resultValue.style.color = 'var(--text-muted)';
+          resultValue.style.fontStyle = 'italic';
+          resultValue.removeAttribute('data-hostname');
+          copyBtn.style.display = 'none';
+          resultContainer.style.display = 'block';
+        }
+      } catch (error) {
+        resultValue.textContent = 'Lookup failed: ' + error.message;
+        resultValue.style.color = 'var(--text-muted)';
+        resultValue.style.fontStyle = 'italic';
+        resultValue.removeAttribute('data-hostname');
+        copyBtn.style.display = 'none';
+        resultContainer.style.display = 'block';
+      } finally {
+        // Re-enable button
+        btn.disabled = false;
+        btn.classList.remove('loading');
+        btnText.textContent = 'Lookup Reverse DNS';
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function copyHostname() {
+      const hostnameValue = document.getElementById('reverse-dns-value');
+      const hostname = hostnameValue.getAttribute('data-hostname');
+      if (!hostname) {
+        return;
+      }
+      navigator.clipboard.writeText(hostname).then(function() {
+        const btn = document.getElementById('reverse-dns-copy-btn');
+        btn.classList.add('copied');
+        setTimeout(function() {
+          btn.classList.remove('copied');
+        }, 1500);
+      });
+    }
+  </script>
+</body>
+</html>
+

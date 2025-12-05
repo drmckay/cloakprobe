@@ -104,10 +104,12 @@ sudo nano /etc/systemd/system/cloakprobe.service
 
 Key environment variables:
 - `CLOAKPROBE_PRIVACY_MODE`: `strict` or `balanced`
-- `CLOAKPROBE_ASN_DB_PATH`: Path to ASN database (default: `/opt/cloakprobe/data/asn_db.bin`)
-- `CLOAKPROBE_RIPE_DB_PATH`: Path to RIPE organization database (default: `/opt/cloakprobe/data/ripe_db.bin`)
+- `CLOAKPROBE_ASN_DB_PATH`: Path to ASN database. If not set, automatically searches in `data/asn_db.bin` and `./data/asn_db.bin`
+- `CLOAKPROBE_RIPE_DB_PATH`: Path to RIPE organization database. If not set, automatically searches in `data/ripe_db.bin` and `./data/ripe_db.bin`
 - `CLOAKPROBE_REGION`: Optional region identifier
 - `PORT`: Port to bind to (default: `8080`)
+
+**Note**: Starting with version 0.1.1, CloakProbe automatically searches for database files in the `data/` directory if environment variables are not set. This makes configuration easier - you can simply place database files in the `data/` directory relative to where you run the binary.
 
 After editing, reload and restart:
 
@@ -179,4 +181,27 @@ Check internet connection and disk space:
 df -h /opt/cloakprobe/data
 curl -I https://iptoasn.com/data/ip2asn-combined.tsv.gz
 ```
+
+## Privacy Policy
+
+CloakProbe includes a comprehensive Privacy Policy page accessible at `/privacy`. The policy is GDPR and CCPA compliant and explains:
+
+- What data is collected and processed
+- How data is handled (no disk storage, no logging in strict mode)
+- Cloudflare's data processing practices
+- User rights under GDPR and CCPA
+- Security measures implemented
+- Reverse DNS lookup feature (client-side only, on user interaction)
+
+The privacy policy is accessible from the main page footer and can be viewed at `http://your-server/privacy`.
+
+### Reverse DNS Lookup
+
+CloakProbe includes an optional client-side reverse DNS lookup feature that allows users to query the hostname (PTR record) associated with their IP address:
+
+- **User-initiated only**: The lookup only happens when the user explicitly clicks the "Lookup Reverse DNS" button
+- **Client-side**: Uses Cloudflare DNS over HTTPS (DoH) directly from the browser
+- **No server-side processing**: No data is sent to the CloakProbe server
+- **Privacy-focused**: Cloudflare DoH is privacy-focused and does not log queries
+- **No automatic requests**: The page does not send any external requests automatically, neither client-side nor server-side
 
