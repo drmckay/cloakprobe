@@ -235,6 +235,8 @@ jobs:
       contents: write
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download x86_64 package
         uses: actions/download-artifact@v4
         with:
