@@ -262,20 +262,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Check if release exists before trying to delete
+          # Delete release and its tag together
           if gh release view nightly >/dev/null 2>&1; then
-            echo "Release 'nightly' exists, deleting..."
-            gh release delete nightly --yes || true
+            echo "Release 'nightly' exists, deleting with tag..."
+            gh release delete nightly --cleanup-tag --yes || true
           else
-            echo "Release 'nightly' does not exist, skipping deletion"
-          fi
-          
-          # Check if tag exists and delete it
-          if git ls-remote --tags origin nightly 2>/dev/null | grep -q nightly; then
-            echo "Tag 'nightly' exists, deleting..."
-            git push origin --delete nightly || true
-          else
-            echo "Tag 'nightly' does not exist, skipping tag deletion"
+            echo "Release 'nightly' does not exist"
+            # Still try to delete orphan tag if it exists
+            gh api repos/${{ github.repository }}/git/refs/tags/nightly -X DELETE 2>/dev/null || true
           fi
         continue-on-error: true
 
