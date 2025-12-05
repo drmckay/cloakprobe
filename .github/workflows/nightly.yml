@@ -247,12 +247,9 @@ jobs:
         id: date
         run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
-      - name: Setup GitHub CLI
-        uses: cli/cli@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Delete previous nightly release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Check if release exists before trying to delete
           if gh release view nightly >/dev/null 2>&1; then
