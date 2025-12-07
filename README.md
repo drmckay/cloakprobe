@@ -111,7 +111,7 @@ sudo systemctl start cloakprobe
 
 - `GET /` – HTML UI (dark card-based view with detailed IP information)
 - `GET /privacy` – Privacy Policy page (GDPR and CCPA compliant)
-- `GET /api/v1/info` – JSON debug info
+- `GET /api/v1/json` – JSON debug info
 - `GET /api/v1/plain` – Plain text output, convenient for CLI
 - `GET /healthz` – Health check, returns `{"status":"ok"}`
 

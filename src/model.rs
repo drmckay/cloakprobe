@@ -55,6 +55,21 @@ pub struct ConnectionInfo {
 pub struct ClientHints {
     pub sec_ch_ua: Option<String>,
     pub sec_ch_ua_platform: Option<String>,
+    pub sec_ch_ua_mobile: Option<String>,
+    pub sec_ch_ua_full_version_list: Option<String>,
+    pub device_memory: Option<String>,
+    pub viewport_width: Option<String>,
+    pub downlink: Option<String>,
+    pub rtt: Option<String>,
+    pub ect: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct SecFetchHeaders {
+    pub site: Option<String>,
+    pub mode: Option<String>,
+    pub dest: Option<String>,
+    pub user: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -62,7 +77,14 @@ pub struct ClientInfo {
     pub user_agent: Option<String>,
     pub accept_language: Option<String>,
     pub accept_encoding: Option<String>,
+    pub dnt: Option<String>,
+    pub sec_gpc: Option<String>,
+    pub save_data: Option<String>,
+    pub upgrade_insecure_requests: Option<String>,
+    pub referer: Option<String>,
+    pub origin: Option<String>,
     pub client_hints: ClientHints,
+    pub sec_fetch: SecFetchHeaders,
 }
 
 #[derive(Serialize)]
@@ -97,8 +119,6 @@ pub struct ServerInfo {
 
 #[derive(Serialize, Default)]
 pub struct CloudflareGeoHeaders {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cf_ipcountry: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub country: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

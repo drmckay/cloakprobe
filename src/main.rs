@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
         .route("/", get(html_handler))
         .route("/privacy", get(privacy_handler))
-        .route("/api/v1/info", get(info_handler))
+        .route("/api/v1/json", get(info_handler))
         .route("/api/v1/plain", get(plain_handler))
         .route("/healthz", get(health_handler))
         .with_state(shared_state)

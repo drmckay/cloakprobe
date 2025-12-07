@@ -5,6 +5,7 @@
   <title>CloakProbe - {{ ip }}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="CloakProbe - Your IP address and network information">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='13' cy='13' r='10' fill='none' stroke='%23f9fafb' stroke-width='2.5'/%3E%3Cline x1='20.5' y1='20.5' x2='29' y2='29' stroke='%23f9fafb' stroke-width='3' stroke-linecap='round'/%3E%3Cellipse cx='13' cy='9' rx='4.5' ry='2.2' fill='%23f9fafb'/%3E%3Cpath d='M13 11.5c-2.5 0-4 1.2-4 2.8v0.5c0 0.3 0.2 0.5 0.5 0.5h7c0.3 0 0.5-0.2 0.5-0.5v-0.5c0-1.6-1.5-2.8-4-2.8z' fill='%23f9fafb'/%3E%3Cpath d='M9.5 15.5c-0.8 0.5-1.5 1.5-1.5 2.5v1h10v-1c0-1-0.7-2-1.5-2.5' fill='%23f9fafb'/%3E%3C/svg%3E">
   <style>
     * {
       margin: 0;
@@ -77,11 +78,16 @@
       justify-content: center;
       gap: 0.75rem;
       margin-bottom: 0.5rem;
+      max-width: 100%;
+      flex-wrap: wrap;
     }
     .ip-value {
-      font-size: clamp(2.5rem, 6vw, 4rem);
+      font-size: clamp(1.5rem, 5vw, 4rem);
       font-weight: 700;
       font-family: "SF Mono", "Monaco", "Cascadia Code", monospace;
+      word-break: break-all;
+      overflow-wrap: anywhere;
+      max-width: 100%;
     }
     .copy-btn {
       background: var(--section-bg);
@@ -489,13 +495,111 @@
           <span class="info-label">Accept-Encoding</span>
           <span class="info-value"><code>{{ accept_encoding }}</code></span>
         </div>
+        {% if referer != "—" %}
         <div class="info-row">
-          <span class="info-label">Sec-CH-UA</span>
-          <span class="info-value"><code>{{ sec_ch_ua }}</code></span>
+          <span class="info-label">Referer</span>
+          <span class="info-value"><code style="font-size: 0.8em;">{{ referer }}</code></span>
         </div>
+        {% endif %}
+        {% if origin != "—" %}
         <div class="info-row">
-          <span class="info-label">Sec-CH-UA-Platform</span>
-          <span class="info-value"><code>{{ sec_ch_ua_platform }}</code></span>
+          <span class="info-label">Origin</span>
+          <span class="info-value"><code>{{ origin }}</code></span>
+        </div>
+        {% endif %}
+
+        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(148, 163, 184, 0.2);">
+          <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 0.75rem; font-weight: 600;">--- Privacy ---</div>
+          <div class="info-row">
+            <span class="info-label">DNT (Do Not Track)</span>
+            <span class="info-value"><code>{{ dnt }}</code></span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Sec-GPC (Global Privacy Control)</span>
+            <span class="info-value"><code>{{ sec_gpc }}</code></span>
+          </div>
+          {% if save_data != "—" %}
+          <div class="info-row">
+            <span class="info-label">Save-Data</span>
+            <span class="info-value"><code>{{ save_data }}</code></span>
+          </div>
+          {% endif %}
+          {% if upgrade_insecure_requests != "—" %}
+          <div class="info-row">
+            <span class="info-label">Upgrade-Insecure-Requests</span>
+            <span class="info-value"><code>{{ upgrade_insecure_requests }}</code></span>
+          </div>
+          {% endif %}
+        </div>
+
+        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(148, 163, 184, 0.2);">
+          <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 0.75rem; font-weight: 600;">--- Client Hints ---</div>
+          <div class="info-row">
+            <span class="info-label">Sec-CH-UA</span>
+            <span class="info-value"><code style="font-size: 0.8em;">{{ sec_ch_ua }}</code></span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Sec-CH-UA-Platform</span>
+            <span class="info-value"><code>{{ sec_ch_ua_platform }}</code></span>
+          </div>
+          {% if sec_ch_ua_mobile != "—" %}
+          <div class="info-row">
+            <span class="info-label">Sec-CH-UA-Mobile</span>
+            <span class="info-value"><code>{{ sec_ch_ua_mobile }}</code></span>
+          </div>
+          {% endif %}
+          {% if sec_ch_ua_full_version_list != "—" %}
+          <div class="info-row">
+            <span class="info-label">Sec-CH-UA-Full-Version-List</span>
+            <span class="info-value"><code style="font-size: 0.75em;">{{ sec_ch_ua_full_version_list }}</code></span>
+          </div>
+          {% endif %}
+          {% if device_memory != "—" %}
+          <div class="info-row">
+            <span class="info-label">Device-Memory</span>
+            <span class="info-value"><code>{{ device_memory }} GB</code></span>
+          </div>
+          {% endif %}
+          {% if viewport_width != "—" %}
+          <div class="info-row">
+            <span class="info-label">Viewport-Width</span>
+            <span class="info-value"><code>{{ viewport_width }}px</code></span>
+          </div>
+          {% endif %}
+          {% if downlink != "—" or rtt != "—" or ect != "—" %}
+          <div class="info-row">
+            <span class="info-label">Network Info</span>
+            <span class="info-value"><code>{% if downlink != "—" %}{{ downlink }} Mbps{% endif %}{% if rtt != "—" %} / {{ rtt }}ms RTT{% endif %}{% if ect != "—" %} ({{ ect }}){% endif %}</code></span>
+          </div>
+          {% endif %}
+        </div>
+
+        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(148, 163, 184, 0.2);">
+          <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 0.75rem; font-weight: 600;">--- Sec-Fetch ---</div>
+          {% if sec_fetch_site != "—" %}
+          <div class="info-row">
+            <span class="info-label">Sec-Fetch-Site</span>
+            <span class="info-value"><code>{{ sec_fetch_site }}</code></span>
+          </div>
+          {% endif %}
+          {% if sec_fetch_mode != "—" %}
+          <div class="info-row">
+            <span class="info-label">Sec-Fetch-Mode</span>
+            <span class="info-value"><code>{{ sec_fetch_mode }}</code></span>
+          </div>
+          {% endif %}
+          {% if sec_fetch_dest != "—" %}
+          <div class="info-row">
+            <span class="info-label">Sec-Fetch-Dest</span>
+            <span class="info-value"><code>{{ sec_fetch_dest }}</code></span>
+          </div>
+          {% endif %}
+          {% if sec_fetch_user != "—" %}
+          <div class="info-row">
+            <span class="info-label">Sec-Fetch-User</span>
+            <span class="info-value"><code>{{ sec_fetch_user }}</code></span>
+          </div>
+          {% endif %}
         </div>
       </div>
 
@@ -521,7 +625,7 @@
     </div>
 
     <div class="footer">
-      <p>API endpoints: <a href="/api/v1/info">JSON</a> | <a href="/api/v1/plain">Plain text</a> | <a href="/healthz">Health</a></p>
+      <p>API endpoints: <a href="/api/v1/json">JSON</a> | <a href="/api/v1/plain">Plain text</a> | <a href="/healthz">Health</a></p>
       <p style="margin-top: 0.5rem;">No tracking • No ads • Privacy-focused</p>
       <p style="margin-top: 1rem;">
         <a href="/privacy" style="color: var(--accent-secondary); text-decoration: none;">Privacy Policy</a>

@@ -43,6 +43,16 @@ fn sanitize_header(value: Option<String>) -> String {
         .unwrap_or_else(|| "—".to_string())
 }
 
+/// Converts DNT header value to human-readable format.
+/// "1" -> "Enabled", "0" -> "Disabled", other/missing -> None
+fn format_dnt(value: Option<String>) -> Option<String> {
+    value.and_then(|v| match v.trim() {
+        "1" => Some("Enabled".to_string()),
+        "0" => Some("Disabled".to_string()),
+        _ => None,
+    })
+}
+
 /// Sanitizes a header value for safe JSON output.
 /// Removes control characters and ensures JSON-safe string.
 fn sanitize_for_json(value: Option<String>) -> Option<String> {
@@ -115,6 +125,30 @@ pub async fn info_handler(
             .get("Accept-Encoding")
             .and_then(|v| v.to_str().ok())
             .map(|s| s.to_string());
+        let dnt = headers
+            .get("DNT")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let sec_gpc = headers
+            .get("Sec-GPC")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let save_data = headers
+            .get("Save-Data")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let upgrade_insecure_requests = headers
+            .get("Upgrade-Insecure-Requests")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let referer = headers
+            .get("Referer")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let origin = headers
+            .get("Origin")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
         let sec_ch_ua = headers
             .get("Sec-CH-UA")
             .and_then(|v| v.to_str().ok())
@@ -123,14 +157,77 @@ pub async fn info_handler(
             .get("Sec-CH-UA-Platform")
             .and_then(|v| v.to_str().ok())
             .map(|s| s.to_string());
+        let sec_ch_ua_mobile = headers
+            .get("Sec-CH-UA-Mobile")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let sec_ch_ua_full_version_list = headers
+            .get("Sec-CH-UA-Full-Version-List")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let device_memory = headers
+            .get("Device-Memory")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let viewport_width = headers
+            .get("Viewport-Width")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let downlink = headers
+            .get("Downlink")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let rtt = headers
+            .get("RTT")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let ect = headers
+            .get("ECT")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let sec_fetch_site = headers
+            .get("Sec-Fetch-Site")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let sec_fetch_mode = headers
+            .get("Sec-Fetch-Mode")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let sec_fetch_dest = headers
+            .get("Sec-Fetch-Dest")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let sec_fetch_user = headers
+            .get("Sec-Fetch-User")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
 
         ClientInfo {
             user_agent: sanitize_for_json(ua),
             accept_language: sanitize_for_json(accept_language),
             accept_encoding: sanitize_for_json(accept_encoding),
+            dnt: format_dnt(dnt),
+            sec_gpc: format_dnt(sec_gpc),
+            save_data: sanitize_for_json(save_data),
+            upgrade_insecure_requests: sanitize_for_json(upgrade_insecure_requests),
+            referer: sanitize_for_json(referer),
+            origin: sanitize_for_json(origin),
             client_hints: ClientHints {
                 sec_ch_ua: sanitize_for_json(sec_ch_ua),
                 sec_ch_ua_platform: sanitize_for_json(sec_ch_ua_platform),
+                sec_ch_ua_mobile: sanitize_for_json(sec_ch_ua_mobile),
+                sec_ch_ua_full_version_list: sanitize_for_json(sec_ch_ua_full_version_list),
+                device_memory: sanitize_for_json(device_memory),
+                viewport_width: sanitize_for_json(viewport_width),
+                downlink: sanitize_for_json(downlink),
+                rtt: sanitize_for_json(rtt),
+                ect: sanitize_for_json(ect),
+            },
+            sec_fetch: SecFetchHeaders {
+                site: sanitize_for_json(sec_fetch_site),
+                mode: sanitize_for_json(sec_fetch_mode),
+                dest: sanitize_for_json(sec_fetch_dest),
+                user: sanitize_for_json(sec_fetch_user),
             },
         }
     };
@@ -175,10 +272,6 @@ pub async fn info_handler(
         .map(|s| s.to_string());
 
     // Extract Cloudflare Worker headers - Geo Location
-    let x_cf_country = headers
-        .get("X-CF-Country")
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string());
     let x_cf_city = headers
         .get("X-CF-City")
         .and_then(|v| v.to_str().ok())
@@ -242,9 +335,8 @@ pub async fn info_handler(
 
     // Build Cloudflare headers structure
     let mut geo = CloudflareGeoHeaders::default();
-    if cf_ipcountry.is_some() || x_cf_country.is_some() || x_cf_city.is_some() {
-        geo.cf_ipcountry = sanitize_for_json(cf_ipcountry);
-        geo.country = sanitize_for_json(x_cf_country);
+    if cf_ipcountry.is_some() || x_cf_city.is_some() {
+        geo.country = sanitize_for_json(cf_ipcountry);
         geo.city = sanitize_for_json(x_cf_city);
         geo.region = sanitize_for_json(x_cf_region);
         geo.region_code = sanitize_for_json(x_cf_region_code);
@@ -293,14 +385,14 @@ pub async fn info_handler(
         proxy.x_real_ip = sanitize_for_json(x_real_ip);
     }
 
-    let cloudflare = if geo.cf_ipcountry.is_some()
+    let cloudflare = if geo.country.is_some()
         || network_headers.asn.is_some()
         || connection_headers.cf_visitor.is_some()
         || security.trust_score.is_some()
         || proxy.x_forwarded_for.is_some()
     {
         Some(CloudflareHeaders {
-            geo: if geo.cf_ipcountry.is_some() {
+            geo: if geo.country.is_some() {
                 Some(geo)
             } else {
                 None
@@ -350,24 +442,88 @@ fn extract_client_info(headers: &HeaderMap) -> ClientInfo {
         .get("User-Agent")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
-
     let accept_language = headers
         .get("Accept-Language")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
-
     let accept_encoding = headers
         .get("Accept-Encoding")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
-
+    let dnt = headers
+        .get("DNT")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let sec_gpc = headers
+        .get("Sec-GPC")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let save_data = headers
+        .get("Save-Data")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let upgrade_insecure_requests = headers
+        .get("Upgrade-Insecure-Requests")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let referer = headers
+        .get("Referer")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let origin = headers
+        .get("Origin")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
     let sec_ch_ua = headers
         .get("Sec-CH-UA")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
-
     let sec_ch_ua_platform = headers
         .get("Sec-CH-UA-Platform")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let sec_ch_ua_mobile = headers
+        .get("Sec-CH-UA-Mobile")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let sec_ch_ua_full_version_list = headers
+        .get("Sec-CH-UA-Full-Version-List")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let device_memory = headers
+        .get("Device-Memory")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let viewport_width = headers
+        .get("Viewport-Width")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let downlink = headers
+        .get("Downlink")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let rtt = headers
+        .get("RTT")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let ect = headers
+        .get("ECT")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let sec_fetch_site = headers
+        .get("Sec-Fetch-Site")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let sec_fetch_mode = headers
+        .get("Sec-Fetch-Mode")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let sec_fetch_dest = headers
+        .get("Sec-Fetch-Dest")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let sec_fetch_user = headers
+        .get("Sec-Fetch-User")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
 
@@ -375,9 +531,28 @@ fn extract_client_info(headers: &HeaderMap) -> ClientInfo {
         user_agent: ua,
         accept_language,
         accept_encoding,
+        dnt: format_dnt(dnt),
+        sec_gpc: format_dnt(sec_gpc),
+        save_data,
+        upgrade_insecure_requests,
+        referer,
+        origin,
         client_hints: ClientHints {
             sec_ch_ua,
             sec_ch_ua_platform,
+            sec_ch_ua_mobile,
+            sec_ch_ua_full_version_list,
+            device_memory,
+            viewport_width,
+            downlink,
+            rtt,
+            ect,
+        },
+        sec_fetch: SecFetchHeaders {
+            site: sec_fetch_site,
+            mode: sec_fetch_mode,
+            dest: sec_fetch_dest,
+            user: sec_fetch_user,
         },
     }
 }
@@ -536,10 +711,6 @@ pub async fn html_handler(State(state): State<AppState>, headers: HeaderMap) -> 
         .map(|s| s.to_string());
 
     // Extract Cloudflare Worker headers - Geo Location
-    let x_cf_country = headers
-        .get("X-CF-Country")
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string());
     let x_cf_city = headers
         .get("X-CF-City")
         .and_then(|v| v.to_str().ok())
@@ -721,14 +892,8 @@ pub async fn html_handler(State(state): State<AppState>, headers: HeaderMap) -> 
     let mut geo_location_items = Vec::new();
     if cf_ipcountry.as_deref().unwrap_or("—") != "—" {
         geo_location_items.push(HeaderItem {
-            label: "CF-IPCountry".to_string(),
-            value: sanitize_header(cf_ipcountry.clone()),
-        });
-    }
-    if x_cf_country.as_deref().unwrap_or("—") != "—" {
-        geo_location_items.push(HeaderItem {
             label: "Country".to_string(),
-            value: sanitize_header(x_cf_country.clone()),
+            value: sanitize_header(cf_ipcountry.clone()),
         });
     }
     if x_cf_city.as_deref().unwrap_or("—") != "—" {
@@ -881,6 +1046,15 @@ pub async fn html_handler(State(state): State<AppState>, headers: HeaderMap) -> 
         "accept_encoding",
         &sanitize_header(client.accept_encoding.clone()),
     );
+    context.insert("dnt", &sanitize_header(client.dnt.clone()));
+    context.insert("sec_gpc", &sanitize_header(client.sec_gpc.clone()));
+    context.insert("save_data", &sanitize_header(client.save_data.clone()));
+    context.insert(
+        "upgrade_insecure_requests",
+        &sanitize_header(client.upgrade_insecure_requests.clone()),
+    );
+    context.insert("referer", &sanitize_header(client.referer.clone()));
+    context.insert("origin", &sanitize_header(client.origin.clone()));
     context.insert(
         "sec_ch_ua",
         &sanitize_header(client.client_hints.sec_ch_ua.clone()),
@@ -888,6 +1062,44 @@ pub async fn html_handler(State(state): State<AppState>, headers: HeaderMap) -> 
     context.insert(
         "sec_ch_ua_platform",
         &sanitize_header(client.client_hints.sec_ch_ua_platform.clone()),
+    );
+    context.insert(
+        "sec_ch_ua_mobile",
+        &sanitize_header(client.client_hints.sec_ch_ua_mobile.clone()),
+    );
+    context.insert(
+        "sec_ch_ua_full_version_list",
+        &sanitize_header(client.client_hints.sec_ch_ua_full_version_list.clone()),
+    );
+    context.insert(
+        "device_memory",
+        &sanitize_header(client.client_hints.device_memory.clone()),
+    );
+    context.insert(
+        "viewport_width",
+        &sanitize_header(client.client_hints.viewport_width.clone()),
+    );
+    context.insert(
+        "downlink",
+        &sanitize_header(client.client_hints.downlink.clone()),
+    );
+    context.insert("rtt", &sanitize_header(client.client_hints.rtt.clone()));
+    context.insert("ect", &sanitize_header(client.client_hints.ect.clone()));
+    context.insert(
+        "sec_fetch_site",
+        &sanitize_header(client.sec_fetch.site.clone()),
+    );
+    context.insert(
+        "sec_fetch_mode",
+        &sanitize_header(client.sec_fetch.mode.clone()),
+    );
+    context.insert(
+        "sec_fetch_dest",
+        &sanitize_header(client.sec_fetch.dest.clone()),
+    );
+    context.insert(
+        "sec_fetch_user",
+        &sanitize_header(client.sec_fetch.user.clone()),
     );
 
     // Server information
@@ -999,10 +1211,6 @@ pub async fn plain_handler(
         .map(|s| s.to_string());
 
     // Extract Cloudflare Worker headers - Geo Location
-    let x_cf_country = headers
-        .get("X-CF-Country")
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string());
     let x_cf_city = headers
         .get("X-CF-City")
         .and_then(|v| v.to_str().ok())
@@ -1120,13 +1328,10 @@ pub async fn plain_handler(
     }
 
     // Cloudflare Headers - Geo Location
-    if cf_ipcountry.is_some() || x_cf_country.is_some() || x_cf_city.is_some() {
+    if cf_ipcountry.is_some() || x_cf_city.is_some() {
         writeln!(&mut out, "\n=== Cloudflare Client Info ===").ok();
         writeln!(&mut out, "--- Geo Location ---").ok();
         if let Some(c) = cf_ipcountry.as_ref() {
-            writeln!(&mut out, "Country: {}", c).ok();
-        }
-        if let Some(c) = x_cf_country.as_ref() {
             writeln!(&mut out, "Country: {}", c).ok();
         }
         if let Some(c) = x_cf_city.as_ref() {
@@ -1224,14 +1429,90 @@ pub async fn plain_handler(
     if let Some(enc) = headers.get("Accept-Encoding").and_then(|v| v.to_str().ok()) {
         writeln!(&mut out, "Accept-Encoding: {}", enc).ok();
     }
+    if let Some(referer) = headers.get("Referer").and_then(|v| v.to_str().ok()) {
+        writeln!(&mut out, "Referer: {}", referer).ok();
+    }
+    if let Some(origin) = headers.get("Origin").and_then(|v| v.to_str().ok()) {
+        writeln!(&mut out, "Origin: {}", origin).ok();
+    }
+
+    // Privacy headers
+    if let Some(dnt) = format_dnt(
+        headers
+            .get("DNT")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string()),
+    ) {
+        writeln!(&mut out, "DNT: {}", dnt).ok();
+    }
+    if let Some(gpc) = format_dnt(
+        headers
+            .get("Sec-GPC")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string()),
+    ) {
+        writeln!(&mut out, "Sec-GPC: {}", gpc).ok();
+    }
+    if let Some(save_data) = headers.get("Save-Data").and_then(|v| v.to_str().ok()) {
+        writeln!(&mut out, "Save-Data: {}", save_data).ok();
+    }
+    if let Some(uir) = headers
+        .get("Upgrade-Insecure-Requests")
+        .and_then(|v| v.to_str().ok())
+    {
+        writeln!(&mut out, "Upgrade-Insecure-Requests: {}", uir).ok();
+    }
+
+    // Client Hints
     if let Some(sec_ch_ua) = headers.get("Sec-CH-UA").and_then(|v| v.to_str().ok()) {
         writeln!(&mut out, "Sec-CH-UA: {}", sec_ch_ua).ok();
     }
-    if let Some(sec_ch_ua_platform) = headers
+    if let Some(v) = headers
         .get("Sec-CH-UA-Platform")
         .and_then(|v| v.to_str().ok())
     {
-        writeln!(&mut out, "Sec-CH-UA-Platform: {}", sec_ch_ua_platform).ok();
+        writeln!(&mut out, "Sec-CH-UA-Platform: {}", v).ok();
+    }
+    if let Some(v) = headers
+        .get("Sec-CH-UA-Mobile")
+        .and_then(|v| v.to_str().ok())
+    {
+        writeln!(&mut out, "Sec-CH-UA-Mobile: {}", v).ok();
+    }
+    if let Some(v) = headers
+        .get("Sec-CH-UA-Full-Version-List")
+        .and_then(|v| v.to_str().ok())
+    {
+        writeln!(&mut out, "Sec-CH-UA-Full-Version-List: {}", v).ok();
+    }
+    if let Some(v) = headers.get("Device-Memory").and_then(|v| v.to_str().ok()) {
+        writeln!(&mut out, "Device-Memory: {}", v).ok();
+    }
+    if let Some(v) = headers.get("Viewport-Width").and_then(|v| v.to_str().ok()) {
+        writeln!(&mut out, "Viewport-Width: {}", v).ok();
+    }
+    if let Some(v) = headers.get("Downlink").and_then(|v| v.to_str().ok()) {
+        writeln!(&mut out, "Downlink: {}", v).ok();
+    }
+    if let Some(v) = headers.get("RTT").and_then(|v| v.to_str().ok()) {
+        writeln!(&mut out, "RTT: {}", v).ok();
+    }
+    if let Some(v) = headers.get("ECT").and_then(|v| v.to_str().ok()) {
+        writeln!(&mut out, "ECT: {}", v).ok();
+    }
+
+    // Sec-Fetch headers
+    if let Some(v) = headers.get("Sec-Fetch-Site").and_then(|v| v.to_str().ok()) {
+        writeln!(&mut out, "Sec-Fetch-Site: {}", v).ok();
+    }
+    if let Some(v) = headers.get("Sec-Fetch-Mode").and_then(|v| v.to_str().ok()) {
+        writeln!(&mut out, "Sec-Fetch-Mode: {}", v).ok();
+    }
+    if let Some(v) = headers.get("Sec-Fetch-Dest").and_then(|v| v.to_str().ok()) {
+        writeln!(&mut out, "Sec-Fetch-Dest: {}", v).ok();
+    }
+    if let Some(v) = headers.get("Sec-Fetch-User").and_then(|v| v.to_str().ok()) {
+        writeln!(&mut out, "Sec-Fetch-User: {}", v).ok();
     }
 
     Ok(out)

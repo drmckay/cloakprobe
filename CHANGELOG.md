@@ -7,12 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- Client-side reverse DNS lookup using Cloudflare DNS over HTTPS (DoH)
-- Content Security Policy updated to allow Cloudflare DoH API connections
+### Added
+- Favicon with spy figure and magnifying glass logo (SVG, inline data URI)
+- DNT (Do Not Track) header display in Client Information (HTML, JSON, plain text)
+- Comprehensive privacy/security headers support:
+  - Privacy: Sec-GPC (Global Privacy Control), Save-Data, Upgrade-Insecure-Requests
+  - Request context: Referer, Origin
+  - Sec-Fetch headers: Site, Mode, Dest, User
+  - Extended Client Hints: Sec-CH-UA-Mobile, Sec-CH-UA-Full-Version-List, Device-Memory, Viewport-Width, Downlink, RTT, ECT
+- Client Information card now organized into subsections: Privacy, Client Hints, Sec-Fetch
+
+### Changed
+- Renamed JSON API endpoint from `/api/v1/info` to `/api/v1/json`
+- Renamed CF-IPCountry to Country in Cloudflare Geo Location card for cleaner UI
+- Removed duplicate Country field (from X-CF-Country header) - now only CF-IPCountry value is shown as "Country"
+- Simplified CloudflareGeoHeaders JSON structure (removed cf_ipcountry field, kept only country)
+
+### Fixed
+- Mobile responsive: Long IPv6 addresses and hostnames no longer overflow the container
 
 ## [0.1.1] - 2025-12-05
 
 ### Added
+- Client-side reverse DNS lookup using Cloudflare DNS over HTTPS (DoH)
+- Content Security Policy updated to allow Cloudflare DoH API connections
 - Tera template engine integration for cleaner HTML generation
 - Cloudflare Worker headers support (X-CF-Country, X-CF-City, X-CF-Region, X-CF-ASN, X-CF-Trust-Score, etc.)
 - TLS Cipher display in Connection Details card
