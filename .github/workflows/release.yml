@@ -1,0 +1,381 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: false
+            platform: linux
+            arch: x86_64
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: true
+            platform: linux
+            arch: aarch64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-cargo-
+
+      - name: Build (native)
+        if: ${{ !matrix.cross }}
+        run: |
+          cargo build --release --target ${{ matrix.target }}
+          cargo build --release --target ${{ matrix.target }} --bin asn_builder
+          cargo build --release --target ${{ matrix.target }} --bin ripe_builder
+
+      - name: Build (cross)
+        if: matrix.cross
+        run: |
+          cross build --release --target ${{ matrix.target }}
+          cross build --release --target ${{ matrix.target }} --bin asn_builder
+          cross build --release --target ${{ matrix.target }} --bin ripe_builder
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            target/${{ matrix.target }}/release/cloakprobe
+            target/${{ matrix.target }}/release/asn_builder
+            target/${{ matrix.target }}/release/ripe_builder
+
+  build-databases:
+    name: Build Databases
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-db-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-db-
+
+      - name: Build database builders
+        run: |
+          cargo build --release --bin asn_builder
+          cargo build --release --bin ripe_builder
+
+      - name: Download ip2asn database
+        run: |
+          mkdir -p data
+          for i in 1 2 3 4 5; do
+            echo "Attempt $i: Downloading ip2asn database..."
+            if curl -sSfL --connect-timeout 30 --max-time 120 \
+              "https://iptoasn.com/data/ip2asn-combined.tsv.gz" \
+              -o data/ip2asn-combined.tsv.gz; then
+              echo "Download successful"
+              break
+            fi
+            if [ $i -eq 5 ]; then
+              echo "Failed to download after 5 attempts"
+              exit 1
+            fi
+            echo "Download failed, retrying in $((2**i)) seconds..."
+            sleep $((2**i))
+          done
+          gunzip -c data/ip2asn-combined.tsv.gz > data/ip2asn-combined.tsv
+
+      - name: Download RIPE database
+        run: |
+          download_with_retry() {
+            local url="$1"
+            local output="$2"
+            for i in 1 2 3 4 5; do
+              echo "Attempt $i: Downloading $(basename $output)..."
+              if curl -sSfL --connect-timeout 30 --max-time 300 "$url" -o "$output"; then
+                echo "Download successful"
+                return 0
+              fi
+              if [ $i -eq 5 ]; then
+                echo "Failed to download $url after 5 attempts"
+                return 1
+              fi
+              echo "Download failed, retrying in $((2**i)) seconds..."
+              sleep $((2**i))
+            done
+          }
+          
+          download_with_retry "ftp://ftp.ripe.net/ripe/dbase/split/ripe.db.aut-num.gz" data/ripe.db.aut-num.gz
+          download_with_retry "ftp://ftp.ripe.net/ripe/dbase/split/ripe.db.organisation.gz" data/ripe.db.organisation.gz
+          
+          gunzip -c data/ripe.db.aut-num.gz > data/ripe.db.aut-num.txt
+          gunzip -c data/ripe.db.organisation.gz > data/ripe.db.organisation.txt
+
+      - name: Build ASN database
+        run: ./target/release/asn_builder data/ip2asn-combined.tsv data/asn_db.bin
+
+      - name: Build RIPE database
+        run: ./target/release/ripe_builder data/ripe.db.aut-num.txt data/ripe.db.organisation.txt data/ripe_db.bin
+
+      - name: Upload databases
+        uses: actions/upload-artifact@v4
+        with:
+          name: databases
+          path: |
+            data/asn_db.bin
+            data/ripe_db.bin
+
+  package:
+    name: Package ${{ matrix.platform }}-${{ matrix.arch }}
+    needs: [build, build-databases]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            platform: linux
+            arch: x86_64
+          - target: aarch64-unknown-linux-gnu
+            platform: linux
+            arch: aarch64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: binaries-${{ matrix.platform }}-${{ matrix.arch }}
+          path: binaries
+
+      - name: Download databases
+        uses: actions/download-artifact@v4
+        with:
+          name: databases
+          path: databases
+
+      - name: Create package
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          PACKAGE_NAME="cloakprobe-${VERSION}-${{ matrix.platform }}-${{ matrix.arch }}"
+          PACKAGE_DIR="${PACKAGE_NAME}"
+          
+          mkdir -p "${PACKAGE_DIR}/data"
+          mkdir -p "${PACKAGE_DIR}/scripts"
+          mkdir -p "${PACKAGE_DIR}/systemd"
+          mkdir -p "${PACKAGE_DIR}/templates"
+          
+          # Copy binaries
+          cp binaries/cloakprobe "${PACKAGE_DIR}/"
+          cp binaries/asn_builder "${PACKAGE_DIR}/"
+          cp binaries/ripe_builder "${PACKAGE_DIR}/"
+          chmod +x "${PACKAGE_DIR}/cloakprobe"
+          chmod +x "${PACKAGE_DIR}/asn_builder"
+          chmod +x "${PACKAGE_DIR}/ripe_builder"
+          
+          # Copy databases
+          cp databases/asn_db.bin "${PACKAGE_DIR}/data/"
+          cp databases/ripe_db.bin "${PACKAGE_DIR}/data/"
+          
+          # Copy scripts
+          cp scripts/update_asn_db.sh "${PACKAGE_DIR}/scripts/"
+          cp scripts/update_ripe_db.sh "${PACKAGE_DIR}/scripts/"
+          chmod +x "${PACKAGE_DIR}/scripts/"*.sh
+          
+          # Copy systemd service
+          cp systemd/cloakprobe.service "${PACKAGE_DIR}/systemd/"
+          
+          # Copy templates
+          cp -r templates/* "${PACKAGE_DIR}/templates/"
+          
+          # Copy documentation
+          cp README.md "${PACKAGE_DIR}/"
+          cp LICENSE "${PACKAGE_DIR}/"
+          cp CHANGELOG.md "${PACKAGE_DIR}/"
+          
+          # Create tarball
+          tar -czvf "${PACKAGE_NAME}.tar.gz" "${PACKAGE_DIR}"
+          
+          # Create checksum
+          sha256sum "${PACKAGE_NAME}.tar.gz" > "${PACKAGE_NAME}.tar.gz.sha256"
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            cloakprobe-${{ steps.version.outputs.version }}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
+            cloakprobe-${{ steps.version.outputs.version }}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz.sha256
+
+  release:
+    name: Create Release
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Download x86_64 package
+        uses: actions/download-artifact@v4
+        with:
+          name: package-linux-x86_64
+          path: packages
+
+      - name: Download aarch64 package
+        uses: actions/download-artifact@v4
+        with:
+          name: package-linux-aarch64
+          path: packages
+
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          # Extract the changelog section for this version
+          # Look for ## [X.Y.Z] or ## [Unreleased] and extract until next ## [
+          CHANGELOG_SECTION=$(awk -v ver="$VERSION" '
+            /^## \[/ {
+              if (found) exit
+              if ($0 ~ "\\[" ver "\\]" || $0 ~ "\\[Unreleased\\]") {
+                found = 1
+                next
+              }
+            }
+            found { print }
+          ' CHANGELOG.md)
+          
+          # If no specific version found, try to get Unreleased section
+          if [ -z "$CHANGELOG_SECTION" ]; then
+            CHANGELOG_SECTION=$(awk '
+              /^## \[Unreleased\]/ { found = 1; next }
+              /^## \[/ { if (found) exit }
+              found { print }
+            ' CHANGELOG.md)
+          fi
+          
+          # Write to file for release notes
+          echo "$CHANGELOG_SECTION" > changelog_section.md
+          
+          # Output for debugging
+          echo "Extracted changelog:"
+          cat changelog_section.md
+
+      - name: Create release notes
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          cat <<EOF > release_notes.md
+          ## CloakProbe v${VERSION}
+          
+          Privacy-first IP information service behind Cloudflare.
+          
+          ### What's Changed
+          
+          $(cat changelog_section.md)
+          
+          ---
+          
+          ### Downloads
+          
+          | Platform | Architecture | File |
+          |----------|-------------|------|
+          | Linux | x86_64 (AMD64) | \`cloakprobe-${VERSION}-linux-x86_64.tar.gz\` |
+          | Linux | aarch64 (ARM64) | \`cloakprobe-${VERSION}-linux-aarch64.tar.gz\` |
+          
+          ### Package Contents
+          
+          Each package includes:
+          - \`cloakprobe\` - Main binary
+          - \`asn_builder\` - ASN database builder
+          - \`ripe_builder\` - RIPE organization database builder
+          - \`data/asn_db.bin\` - Pre-built ASN database (from iptoasn.com)
+          - \`data/ripe_db.bin\` - Pre-built RIPE organization database
+          - \`templates/\` - HTML templates
+          - \`scripts/\` - Database update scripts
+          - \`systemd/\` - Systemd service file
+          - \`README.md\`, \`LICENSE\`, \`CHANGELOG.md\`
+          
+          ### Quick Start
+          
+          \`\`\`bash
+          # Download and extract (example for x86_64)
+          curl -LO https://github.com/drmckay/cloakprobe/releases/download/v${VERSION}/cloakprobe-${VERSION}-linux-x86_64.tar.gz
+          tar -xzf cloakprobe-${VERSION}-linux-x86_64.tar.gz
+          cd cloakprobe-${VERSION}-linux-x86_64
+          
+          # Verify checksum
+          sha256sum -c ../cloakprobe-${VERSION}-linux-x86_64.tar.gz.sha256
+          
+          # Run
+          ./cloakprobe
+          \`\`\`
+          
+          For full installation and deployment instructions, see the [documentation](https://cloakprobe.dev/docs/).
+          
+          ---
+          
+          **Full Changelog**: https://github.com/drmckay/cloakprobe/compare/v$(echo ${VERSION} | awk -F. '{print $1"."$2"."$3-1}')...v${VERSION}
+          EOF
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          gh release create "${{ github.ref_name }}" \
+            packages/cloakprobe-${VERSION}-linux-x86_64.tar.gz \
+            packages/cloakprobe-${VERSION}-linux-x86_64.tar.gz.sha256 \
+            packages/cloakprobe-${VERSION}-linux-aarch64.tar.gz \
+            packages/cloakprobe-${VERSION}-linux-aarch64.tar.gz.sha256 \
+            --title "CloakProbe v${VERSION}" \
+            --notes-file release_notes.md \
+            --verify-tag
+
