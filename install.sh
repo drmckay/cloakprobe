@@ -12,6 +12,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 INSTALL_DIR="/opt/cloakprobe"
+CONFIG_DIR="/etc/cloakprobe"
 SERVICE_USER="cloakprobe"
 SERVICE_GROUP="cloakprobe"
 GITHUB_REPO="drmckay/cloakprobe"
@@ -19,6 +20,7 @@ BINARY_NAME="cloakprobe"
 BUILDER_BINARY="asn_builder"
 RIPE_BUILDER_BINARY="ripe_builder"
 SERVICE_FILE="systemd/cloakprobe.service"
+CONFIG_FILE="cloakprobe.example.toml"
 
 # Functions
 log_info() {
@@ -180,6 +182,8 @@ install_binary() {
     # Create installation directory structure
     mkdir -p "${INSTALL_DIR}/data"
     mkdir -p "${INSTALL_DIR}/scripts"
+    mkdir -p "${INSTALL_DIR}/templates"
+    mkdir -p "${CONFIG_DIR}"
     
     # Extract archive to temp directory
     local temp_extract="/tmp/cloakprobe_extract"
@@ -202,6 +206,29 @@ install_binary() {
         log_info "ASN database installed"
     else
         log_warn "ASN database not found in archive"
+    fi
+    
+    # Copy templates if they exist
+    if [[ -d "${temp_extract}/templates" ]]; then
+        cp -r "${temp_extract}/templates/"* "${INSTALL_DIR}/templates/" 2>/dev/null || true
+        log_info "Templates installed"
+    fi
+    
+    # Copy and install configuration file
+    if [[ -f "${temp_extract}/${CONFIG_FILE}" ]]; then
+        # Copy example to install dir
+        cp "${temp_extract}/${CONFIG_FILE}" "${INSTALL_DIR}/${CONFIG_FILE}"
+        
+        # Create default config if it doesn't exist
+        if [[ ! -f "${CONFIG_DIR}/cloakprobe.toml" ]]; then
+            cp "${temp_extract}/${CONFIG_FILE}" "${CONFIG_DIR}/cloakprobe.toml"
+            # Update paths in config for installed location
+            sed -i "s|data/asn_db.bin|${INSTALL_DIR}/data/asn_db.bin|g" "${CONFIG_DIR}/cloakprobe.toml"
+            sed -i "s|data/ripe_db.bin|${INSTALL_DIR}/data/ripe_db.bin|g" "${CONFIG_DIR}/cloakprobe.toml"
+            log_info "Configuration file installed to ${CONFIG_DIR}/cloakprobe.toml"
+        else
+            log_info "Configuration file already exists, skipping"
+        fi
     fi
     
     # Copy service file if it exists
@@ -236,6 +263,13 @@ install_binary() {
         log_info "RIPE organization update script installed"
     fi
     
+    # Copy nginx snippets if they exist
+    if [[ -d "${temp_extract}/docs" ]]; then
+        mkdir -p "${INSTALL_DIR}/docs"
+        cp -r "${temp_extract}/docs/"* "${INSTALL_DIR}/docs/" 2>/dev/null || true
+        log_info "Documentation installed"
+    fi
+    
     # Cleanup
     rm -rf "${temp_extract}"
     rm -f /tmp/cloakprobe.tar.gz
@@ -253,8 +287,11 @@ create_user() {
 setup_permissions() {
     log_info "Setting up permissions..."
     chown -R "${SERVICE_USER}:${SERVICE_GROUP}" "${INSTALL_DIR}"
+    chown -R "${SERVICE_USER}:${SERVICE_GROUP}" "${CONFIG_DIR}"
     chmod 755 "${INSTALL_DIR}"
     chmod 755 "${INSTALL_DIR}/data"
+    chmod 755 "${CONFIG_DIR}"
+    chmod 644 "${CONFIG_DIR}/cloakprobe.toml" 2>/dev/null || true
 }
 
 install_systemd_service() {
@@ -269,13 +306,24 @@ install_systemd_service() {
     if [[ -f "${service_path}" ]]; then
         # Update paths in service file
         sed -i "s|/opt/cloakprobe|${INSTALL_DIR}|g" "${service_path}"
-        cp "${service_path}" "/etc/systemd/system/${SERVICE_FILE}"
-        systemctl daemon-reload
-        log_info "Service installed"
+        sed -i "s|/etc/cloakprobe|${CONFIG_DIR}|g" "${service_path}"
+        cp "${service_path}" "/etc/systemd/system/cloakprobe.service"
+        log_info "Service installed: cloakprobe.service"
     else
         log_error "Service file not found: ${service_path}"
         exit 1
     fi
+    
+    # Install multi-instance template service (for advanced deployments)
+    local template_path="${INSTALL_DIR}/systemd/cloakprobe@.service"
+    if [[ -f "${template_path}" ]]; then
+        sed -i "s|/opt/cloakprobe|${INSTALL_DIR}|g" "${template_path}"
+        sed -i "s|/etc/cloakprobe|${CONFIG_DIR}|g" "${template_path}"
+        cp "${template_path}" "/etc/systemd/system/cloakprobe@.service"
+        log_info "Multi-instance template installed: cloakprobe@.service"
+    fi
+    
+    systemctl daemon-reload
 }
 
 setup_asn_database() {
@@ -361,92 +409,117 @@ print_summary() {
     log_info "Installation completed!"
     echo ""
     
-    # Check if ASN database was installed
+    # Check installation status
+    echo "Installation status:"
+    
     if [[ -f "${INSTALL_DIR}/data/asn_db.bin" ]]; then
-        echo "✅ ASN database is already included in the release"
+        echo "  ✅ ASN database installed"
     else
-        echo "⚠️  ASN database not found"
-        echo "   1. Download ASN database:"
-        echo "      ${INSTALL_DIR}/scripts/update_asn_db.sh"
-        echo ""
+        echo "  ⚠️  ASN database not found"
     fi
     
+    if [[ -f "${CONFIG_DIR}/cloakprobe.toml" ]]; then
+        echo "  ✅ Configuration file: ${CONFIG_DIR}/cloakprobe.toml"
+    else
+        echo "  ⚠️  Configuration file not found"
+    fi
+    
+    if [[ -f "${INSTALL_DIR}/templates/index.html.tera" ]]; then
+        echo "  ✅ Templates installed"
+    fi
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "Configuration:"
+    echo ""
+    echo "  CloakProbe uses a TOML configuration file for all settings."
+    echo "  Edit the configuration file to customize your deployment:"
+    echo ""
+    echo "    sudo nano ${CONFIG_DIR}/cloakprobe.toml"
+    echo ""
+    echo "  Key settings:"
+    echo "    [server]"
+    echo "    bind_address = \"127.0.0.1\"  # Listen address"
+    echo "    port = 8080                   # Listen port"
+    echo "    mode = \"cloudflare\"          # or \"nginx\" for direct proxy"
+    echo ""
+    echo "  For detailed nginx configuration examples, see:"
+    echo "    ${INSTALL_DIR}/docs/nginx-deployment.md"
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
     echo "Next steps:"
-    if [[ ! -f "${INSTALL_DIR}/data/asn_db.bin" ]]; then
-        echo "  1. Download ASN database (if not already done):"
-        echo "     ${INSTALL_DIR}/scripts/update_asn_db.sh"
-        echo ""
-        echo "  2. (Optional) Download RIPE organization database:"
-        echo "     ${INSTALL_DIR}/scripts/update_ripe_db.sh"
-        echo ""
-        echo "  3. Configure environment variables (if needed):"
-    else
-        echo "  1. (Optional) Download RIPE organization database:"
-        echo "     ${INSTALL_DIR}/scripts/update_ripe_db.sh"
-        echo ""
-        echo "  2. Configure environment variables (if needed):"
-    fi
-    echo "     Edit /etc/systemd/system/${SERVICE_FILE}"
-    echo ""
-    echo "     Note: Starting with v0.1.1, databases are automatically detected"
-    echo "     in the data/ directory if environment variables are not set."
-    echo ""
-    if [[ ! -f "${INSTALL_DIR}/data/asn_db.bin" ]]; then
-        echo "  4. Start the service:"
-        echo "     sudo systemctl start ${SERVICE_FILE}"
-        echo ""
-        echo "  5. Check status:"
-        echo "     sudo systemctl status ${SERVICE_FILE}"
-        echo ""
-        echo "  6. View logs:"
-        echo "     sudo journalctl -u ${SERVICE_FILE} -f"
-        echo ""
-        echo "  7. Enable auto-start on boot:"
-        echo "     sudo systemctl enable ${SERVICE_FILE}"
-    else
-        echo "  3. Start the service:"
-        echo "     sudo systemctl start ${SERVICE_FILE}"
-        echo ""
-        echo "  4. Check status:"
-        echo "     sudo systemctl status ${SERVICE_FILE}"
-        echo ""
-        echo "  5. View logs:"
-        echo "     sudo journalctl -u ${SERVICE_FILE} -f"
-        echo ""
-        echo "  6. Enable auto-start on boot:"
-        echo "     sudo systemctl enable ${SERVICE_FILE}"
-    fi
     echo ""
     
-    # Check if cron was set up
+    local step=1
+    
+    if [[ ! -f "${INSTALL_DIR}/data/asn_db.bin" ]]; then
+        echo "  ${step}. Download ASN database:"
+        echo "     sudo ${INSTALL_DIR}/scripts/update_asn_db.sh"
+        echo ""
+        ((step++))
+    fi
+    
+    echo "  ${step}. (Optional) Download RIPE organization database:"
+    echo "     sudo ${INSTALL_DIR}/scripts/update_ripe_db.sh"
+    echo ""
+    ((step++))
+    
+    echo "  ${step}. Edit configuration (if needed):"
+    echo "     sudo nano ${CONFIG_DIR}/cloakprobe.toml"
+    echo ""
+    ((step++))
+    
+    echo "  ${step}. Start the service:"
+    echo "     sudo systemctl start cloakprobe"
+    echo ""
+    ((step++))
+    
+    echo "  ${step}. Check status:"
+    echo "     sudo systemctl status cloakprobe"
+    echo ""
+    ((step++))
+    
+    echo "  ${step}. View logs:"
+    echo "     sudo journalctl -u cloakprobe -f"
+    echo ""
+    
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     echo "Automatic database updates:"
+    
     if command -v crontab &> /dev/null; then
         if crontab -u "${SERVICE_USER}" -l 2>/dev/null | grep -q "${INSTALL_DIR}/scripts/update_asn_db.sh"; then
-            echo "✅ ASN database updates configured (daily at 3:00 AM)"
-            echo "   View logs: sudo tail -f /var/log/cloakprobe/asn-update.log"
+            echo "  ✅ ASN database updates configured (daily at 3:00 AM)"
         else
-            echo "⚠️  ASN database updates not configured"
+            echo "  ⚠️  ASN database updates not configured"
         fi
         
         if crontab -u "${SERVICE_USER}" -l 2>/dev/null | grep -q "${INSTALL_DIR}/scripts/update_ripe_db.sh"; then
-            echo "✅ RIPE organization database updates configured (daily at 4:00 AM)"
-            echo "   View logs: sudo tail -f /var/log/cloakprobe/ripe-update.log"
+            echo "  ✅ RIPE organization database updates configured (daily at 4:00 AM)"
         else
-            echo "⚠️  RIPE organization database updates not configured"
+            echo "  ⚠️  RIPE organization database updates not configured"
         fi
         
         if ! crontab -u "${SERVICE_USER}" -l 2>/dev/null | grep -q "${INSTALL_DIR}/scripts/update"; then
             echo ""
-            echo "   To set up manually:"
-            echo "     sudo crontab -u ${SERVICE_USER} -e"
-            echo "     Add:"
-            echo "       0 3 * * * ${INSTALL_DIR}/scripts/update_asn_db.sh >> /var/log/cloakprobe/asn-update.log 2>&1"
-            echo "       0 4 * * * ${INSTALL_DIR}/scripts/update_ripe_db.sh >> /var/log/cloakprobe/ripe-update.log 2>&1"
+            echo "  To set up automatic updates:"
+            echo "    sudo crontab -u ${SERVICE_USER} -e"
+            echo "    Add:"
+            echo "      0 3 * * * ${INSTALL_DIR}/scripts/update_asn_db.sh >> /var/log/cloakprobe/asn-update.log 2>&1"
+            echo "      0 4 * * * ${INSTALL_DIR}/scripts/update_ripe_db.sh >> /var/log/cloakprobe/ripe-update.log 2>&1"
         fi
     else
-        echo "⚠️  crontab not found, automatic updates not configured"
+        echo "  ⚠️  crontab not found, automatic updates not configured"
     fi
+    echo ""
+    
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "Command line options:"
+    echo "  ${INSTALL_DIR}/cloakprobe --help"
+    echo "  ${INSTALL_DIR}/cloakprobe -c /path/to/config.toml"
     echo ""
 }
 

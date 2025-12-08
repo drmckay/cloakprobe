@@ -1,3 +1,4 @@
+use crate::config::ProxyMode;
 use axum::http::HeaderMap;
 use serde::Deserialize;
 use std::net::IpAddr;
@@ -24,21 +25,21 @@ struct CfVisitor {
 
 #[derive(thiserror::Error, Debug)]
 pub enum CfError {
-    #[error("missing CF-Connecting-IP header")]
-    MissingConnectingIp,
-    #[error("invalid IP in CF-Connecting-IP header")]
+    #[error("missing client IP header (CF-Connecting-IP for Cloudflare mode, X-Forwarded-For/X-Real-IP for nginx mode)")]
+    MissingClientIp,
+    #[error("invalid IP address in header")]
     InvalidIp,
 }
 
-pub fn extract_client_context(headers: &HeaderMap) -> Result<ClientContext, CfError> {
-    let cf_connecting_ip = headers
-        .get("CF-Connecting-IP")
-        .ok_or(CfError::MissingConnectingIp)?
-        .to_str()
-        .map_err(|_| CfError::InvalidIp)?;
-
-    let ip: IpAddr = cf_connecting_ip.parse().map_err(|_| CfError::InvalidIp)?;
-
+/// Extract client context based on proxy mode
+///
+/// - Cloudflare mode: Uses CF-Connecting-IP header
+/// - Nginx mode: Uses X-Real-IP or X-Forwarded-For header
+pub fn extract_client_context(
+    headers: &HeaderMap,
+    mode: &ProxyMode,
+) -> Result<ClientContext, CfError> {
+    let ip = extract_client_ip(headers, mode)?;
     let ip_version = if ip.is_ipv4() { 4 } else { 6 };
 
     let cf_ray = headers
@@ -57,26 +58,7 @@ pub fn extract_client_context(headers: &HeaderMap) -> Result<ClientContext, CfEr
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
 
-    let (tls_version, http_protocol);
-
-    if let Some(visitor_hdr) = headers.get("CF-Visitor") {
-        if let Ok(v) = visitor_hdr.to_str() {
-            let parsed: Result<CfVisitor, _> = serde_json::from_str(v);
-            if let Ok(v) = parsed {
-                tls_version = v.tls;
-                http_protocol = v.http_protocol;
-            } else {
-                tls_version = None;
-                http_protocol = None;
-            }
-        } else {
-            tls_version = None;
-            http_protocol = None;
-        }
-    } else {
-        tls_version = None;
-        http_protocol = None;
-    }
+    let (tls_version, http_protocol) = extract_connection_info(headers);
 
     Ok(ClientContext {
         ip,
@@ -87,4 +69,72 @@ pub fn extract_client_context(headers: &HeaderMap) -> Result<ClientContext, CfEr
         tls_version,
         http_protocol,
     })
+}
+
+/// Extract client IP address based on proxy mode
+fn extract_client_ip(headers: &HeaderMap, mode: &ProxyMode) -> Result<IpAddr, CfError> {
+    match mode {
+        ProxyMode::Cloudflare => {
+            // Trust CF-Connecting-IP header from Cloudflare
+            let ip_str = headers
+                .get("CF-Connecting-IP")
+                .ok_or(CfError::MissingClientIp)?
+                .to_str()
+                .map_err(|_| CfError::InvalidIp)?;
+
+            ip_str.parse().map_err(|_| CfError::InvalidIp)
+        }
+        ProxyMode::Nginx => {
+            // Trust X-Real-IP first (most common nginx config)
+            if let Some(real_ip) = headers.get("X-Real-IP") {
+                if let Ok(ip_str) = real_ip.to_str() {
+                    if let Ok(ip) = ip_str.trim().parse() {
+                        return Ok(ip);
+                    }
+                }
+            }
+
+            // Fall back to X-Forwarded-For (first IP in the chain)
+            if let Some(xff) = headers.get("X-Forwarded-For") {
+                if let Ok(xff_str) = xff.to_str() {
+                    // X-Forwarded-For can be: "client, proxy1, proxy2"
+                    // First IP is the original client
+                    if let Some(first_ip) = xff_str.split(',').next() {
+                        if let Ok(ip) = first_ip.trim().parse() {
+                            return Ok(ip);
+                        }
+                    }
+                }
+            }
+
+            Err(CfError::MissingClientIp)
+        }
+    }
+}
+
+/// Extract TLS and HTTP protocol information from headers
+fn extract_connection_info(headers: &HeaderMap) -> (Option<String>, Option<String>) {
+    // Try CF-Visitor header first (Cloudflare)
+    if let Some(visitor_hdr) = headers.get("CF-Visitor") {
+        if let Ok(v) = visitor_hdr.to_str() {
+            if let Ok(parsed) = serde_json::from_str::<CfVisitor>(v) {
+                return (parsed.tls, parsed.http_protocol);
+            }
+        }
+    }
+
+    // Fall back to individual headers (from Cloudflare Worker or nginx)
+    let tls_version = headers
+        .get("X-CF-TLS-Version")
+        .or_else(|| headers.get("X-TLS-Version"))
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    let http_protocol = headers
+        .get("X-CF-HTTP-Protocol")
+        .or_else(|| headers.get("X-HTTP-Protocol"))
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    (tls_version, http_protocol)
 }

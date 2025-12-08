@@ -15,7 +15,69 @@ use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 use tracing::Level;
 
+use std::env;
 use std::net::SocketAddr;
+
+/// Parse command line arguments
+fn parse_args() -> Option<String> {
+    let args: Vec<String> = env::args().collect();
+    let mut config_path = None;
+
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "-c" | "--config" => {
+                if i + 1 < args.len() {
+                    config_path = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    eprintln!("Error: {} requires a path argument", args[i]);
+                    std::process::exit(1);
+                }
+            }
+            "-h" | "--help" => {
+                print_help();
+                std::process::exit(0);
+            }
+            "-v" | "--version" => {
+                println!("cloakprobe {}", env!("CARGO_PKG_VERSION"));
+                std::process::exit(0);
+            }
+            arg => {
+                eprintln!("Unknown argument: {}", arg);
+                print_help();
+                std::process::exit(1);
+            }
+        }
+    }
+
+    config_path
+}
+
+fn print_help() {
+    println!(
+        r#"cloakprobe {} - Privacy-first IP information service
+
+USAGE:
+    cloakprobe [OPTIONS]
+
+OPTIONS:
+    -c, --config <PATH>    Path to configuration file (TOML)
+    -h, --help             Print help information
+    -v, --version          Print version information
+
+CONFIG FILE:
+    Default locations (in order of priority):
+    1. Path specified with -c/--config
+    2. ./cloakprobe.toml
+    3. /etc/cloakprobe/cloakprobe.toml
+
+    Environment variables can override config file values.
+    See cloakprobe.example.toml for configuration options.
+"#,
+        env!("CARGO_PKG_VERSION")
+    );
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -25,12 +87,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_max_level(Level::INFO)
         .init();
 
-    // Load configuration
-    let cfg = AppConfig::from_env().map_err(|e| format!("Failed to load configuration: {e}"))?;
+    // Parse command line arguments
+    let config_path = parse_args();
+
+    // Load configuration from TOML file
+    let cfg = AppConfig::load(config_path.as_deref())
+        .map_err(|e| format!("Failed to load configuration: {e}"))?;
+
+    tracing::info!("Proxy mode: {:?}", cfg.proxy_mode);
+    if let Some(ref region) = cfg.region {
+        tracing::info!("Server region: {}", region);
+    }
 
     tracing::info!("Loading ASN database from: {}", cfg.asn_db_path);
     let asn_db = load_asn_db(&cfg).map_err(|e| format!("Failed to load ASN database: {e}"))?;
     tracing::info!("ASN database loaded successfully");
+
+    // Build bind address from config
+    let addr: SocketAddr = format!("{}:{}", cfg.bind_address, cfg.port)
+        .parse()
+        .map_err(|e| format!("Invalid bind address: {e}"))?;
 
     let shared_state = handlers::AppState {
         config: cfg,
@@ -55,15 +131,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .layer(hsts)
         .layer(xcto)
         .layer(perm);
-
-    // Get bind address from environment or use default
-    let port = std::env::var("PORT")
-        .ok()
-        .and_then(|p| p.parse::<u16>().ok())
-        .unwrap_or(8080);
-    let addr: SocketAddr = format!("0.0.0.0:{}", port)
-        .parse()
-        .map_err(|e| format!("Invalid bind address: {e}"))?;
 
     tracing::info!("Starting server on {}", addr);
 

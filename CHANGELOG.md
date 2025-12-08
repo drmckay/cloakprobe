@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- TOML configuration file support (`cloakprobe.toml`)
+  - Structured configuration with `[server]`, `[privacy]`, and `[database]` sections
+  - Config file search order: CLI arg > `./cloakprobe.toml` > `/etc/cloakprobe/cloakprobe.toml`
+  - Environment variables can override config file values
+- Proxy mode configuration: `cloudflare` (CF-Connecting-IP) or `nginx` (X-Real-IP, X-Forwarded-For)
+- Command line options: `-c/--config`, `-h/--help`, `-v/--version`
+- Example configuration file (`cloakprobe.example.toml`) with full documentation
+- Configurable bind address and port via config file
+- Comprehensive nginx deployment documentation (`docs/nginx-deployment.md`)
+  - Cloudflare-proxied setup with IP restrictions
+  - Direct nginx setup (no Cloudflare)
+  - IPv6-only instance for dual-stack network detection
+  - Security hardening (header spoofing prevention)
+  - Cloudflare IP auto-update script
+  - Systemd multi-instance service template
 - Favicon with spy figure and magnifying glass logo (SVG, inline data URI)
 - DNT (Do Not Track) header display in Client Information (HTML, JSON, plain text)
 - Comprehensive privacy/security headers support:
@@ -18,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Client Information card now organized into subsections: Privacy, Client Hints, Sec-Fetch
 
 ### Changed
+- Configuration now uses TOML file instead of scattered environment variables
 - Renamed JSON API endpoint from `/api/v1/info` to `/api/v1/json`
 - Renamed CF-IPCountry to Country in Cloudflare Geo Location card for cleaner UI
 - Removed duplicate Country field (from X-CF-Country header) - now only CF-IPCountry value is shown as "Country"

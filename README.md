@@ -97,15 +97,69 @@ sudo systemctl enable cloakprobe
 sudo systemctl start cloakprobe
 ```
 
-### Environment Variables
+## Configuration
 
-- `CLOAKPROBE_PRIVACY_MODE`: `strict` or `balanced` (or `CFDEBUG_PRIVACY_MODE` - backward compatible)
-- `CLOAKPROBE_ASN_DB_PATH`: Path to the ASN database binary file. If not set, automatically searches in `data/asn_db.bin` and `./data/asn_db.bin`. Or `CFDEBUG_ASN_DB_PATH`.
-- `CLOAKPROBE_RIPE_DB_PATH`: Path to the RIPE organization database. If not set, automatically searches in `data/ripe_db.bin` and `./data/ripe_db.bin`. Or `CFDEBUG_RIPE_DB_PATH`.
-- `CLOAKPROBE_REGION`: Optional string, e.g. `eu-central`, appears in API response. Or `CFDEBUG_REGION`.
-- `PORT`: Port to bind to (default: `8080`)
+CloakProbe uses a TOML configuration file for clean, organized settings. Environment variables can override config file values for container deployments.
 
-**Note**: If database paths are not specified via environment variables, CloakProbe will automatically search for databases in the `data/` directory relative to the current working directory or the binary location.
+### Configuration File
+
+Copy the example config and customize:
+
+```bash
+cp cloakprobe.example.toml cloakprobe.toml
+```
+
+Config file locations (in order of priority):
+1. Path specified with `-c/--config` argument
+2. `./cloakprobe.toml` (current directory)
+3. `/etc/cloakprobe/cloakprobe.toml` (system-wide)
+
+Example configuration:
+
+```toml
+[server]
+bind_address = "0.0.0.0"
+port = 8080
+mode = "cloudflare"    # "cloudflare" or "nginx"
+region = "eu-central"  # optional
+
+[privacy]
+mode = "strict"        # "strict" or "balanced"
+
+[database]
+asn_db_path = "data/asn_db.bin"
+ripe_db_path = "data/ripe_db.bin"
+```
+
+### Proxy Modes
+
+- **`cloudflare`**: Trust `CF-Connecting-IP` header (default). Use when running behind Cloudflare CDN.
+- **`nginx`**: Trust `X-Real-IP` and `X-Forwarded-For` headers. Use when running behind nginx or other standard reverse proxies without Cloudflare.
+
+### Command Line Options
+
+```bash
+cloakprobe [OPTIONS]
+
+OPTIONS:
+    -c, --config <PATH>    Path to configuration file (TOML)
+    -h, --help             Print help information
+    -v, --version          Print version information
+```
+
+### Environment Variables (Override Config)
+
+Environment variables override TOML config values (useful for containers):
+
+- `CLOAKPROBE_BIND_ADDRESS`: IP address to bind to
+- `CLOAKPROBE_PORT`: Port number
+- `CLOAKPROBE_MODE`: Proxy mode (`cloudflare` or `nginx`)
+- `CLOAKPROBE_REGION`: Server region identifier
+- `CLOAKPROBE_PRIVACY_MODE`: Privacy mode (`strict` or `balanced`)
+- `CLOAKPROBE_ASN_DB_PATH`: Path to ASN database
+- `CLOAKPROBE_RIPE_DB_PATH`: Path to RIPE organization database
+
+**Note**: If database paths are not specified, CloakProbe will automatically search for databases in the `data/` directory.
 
 ## API Endpoints
 
@@ -178,69 +232,58 @@ CLOAKPROBE_PRIVACY_MODE=strict \
 
 ---
 
-## Running Behind Nginx (Reverse Proxy with Cloudflare)
+## Running Behind Nginx
 
-Recommended architecture:
+> 📖 **Detailed Nginx Guide**: See [docs/nginx-deployment.md](docs/nginx-deployment.md) for comprehensive nginx configurations including security hardening, Cloudflare IP restrictions, and dual-stack detection setup.
 
-> Internet → Cloudflare → Nginx (reverse proxy) → CloakProbe (Rust, 127.0.0.1:8080)
+### Quick Setup
 
-1. Run the CloakProbe binary only on localhost, e.g.:
+CloakProbe supports two proxy modes:
 
-```bash
-CLOAKPROBE_PRIVACY_MODE=strict \
-CLOAKPROBE_ASN_DB_PATH=/opt/cloakprobe/data/asn_db.bin \
-CLOAKPROBE_REGION=eu-central \
-  ./target/release/cloakprobe
-# The app listens on 0.0.0.0:8080; block it with firewall, only nginx should access it
-```
+| Mode | Use Case | Trusted Header |
+|------|----------|----------------|
+| `cloudflare` | Behind Cloudflare CDN | `CF-Connecting-IP` |
+| `nginx` | Direct nginx (no CF) | `X-Real-IP` |
 
-2. Nginx configuration (example `/etc/nginx/conf.d/cloakprobe.conf`):
+**Basic nginx config:**
 
 ```nginx
-upstream cloakprobe {
-    server 127.0.0.1:8080;
-}
-
-server {
-    listen 80;
-    server_name ip.example.com;
-
-    # Redirect all HTTP requests to HTTPS
-    return 301 https://$host$request_uri;
-}
-
 server {
     listen 443 ssl http2;
     server_name ip.example.com;
 
-    # SSL configuration (for Cloudflare "Full (strict)" mode, valid cert required on server)
     ssl_certificate     /etc/letsencrypt/live/ip.example.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/ip.example.com/privkey.pem;
 
-    # Disable logging
-    access_log off;
-    error_log /dev/null crit;
-
     location / {
-        proxy_pass http://cloakprobe;
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
 
         proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-
-        proxy_http_version 1.1;
+        
+        # IMPORTANT: Always use $remote_addr to prevent IP spoofing
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $remote_addr;
     }
 }
 ```
 
-3. Cloudflare Configuration
+### Security Warning
 
-- The `ip.example.com` record should be **proxied** (orange cloud).
-- TLS mode: `Full` or `Full (strict)`.
-- The Rust app reads `CF-Connecting-IP`, `CF-Visitor`, `CF-Ray`, etc. headers –
-  these are added by Cloudflare to the request, and nginx forwards them.
-- **Cloudflare Worker Headers**: If you use a Cloudflare Worker that adds custom headers (e.g., `X-CF-Country`, `X-CF-City`, `X-CF-ASN`, `X-CF-Trust-Score`), these will be automatically displayed in the Cloudflare Headers card. All header values are sanitized to prevent XSS attacks.
+**Never use `$proxy_add_x_forwarded_for`** - it appends to existing headers, allowing IP spoofing. Always use `$remote_addr`.
+
+For Cloudflare deployments, restrict connections to Cloudflare IPs only. See [docs/nginx-deployment.md](docs/nginx-deployment.md) for the full security configuration.
+
+### Dual-Stack Detection
+
+For IPv4/IPv6 network capability detection, deploy multiple instances:
+
+- `ip.example.com` - Primary (Cloudflare, dual-stack)
+- `ip4.example.com` - IPv4-only (A record only)
+- `ip6.example.com` - IPv6-only (AAAA record only, no Cloudflare)
+
+See [docs/nginx-deployment.md](docs/nginx-deployment.md) for complete setup instructions
 
 ---
 

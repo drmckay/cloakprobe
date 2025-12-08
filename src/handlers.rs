@@ -75,7 +75,8 @@ pub async fn info_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<InfoResponse>, AppError> {
-    let ctx = extract_client_context(&headers).map_err(|e| AppError::Cf(e.to_string()))?;
+    let ctx = extract_client_context(&headers, &state.config.proxy_mode)
+        .map_err(|e| AppError::Cf(e.to_string()))?;
 
     let asn_info = state.asn_db.lookup(ctx.ip);
 
@@ -648,7 +649,7 @@ fn get_ip_details(ip: &std::net::IpAddr) -> (String, String, String, String, Str
 }
 
 pub async fn html_handler(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
-    let ctx = extract_client_context(&headers).ok();
+    let ctx = extract_client_context(&headers, &state.config.proxy_mode).ok();
     let ip_display = ctx
         .as_ref()
         .map(|c| c.ip.to_string())
@@ -1164,7 +1165,8 @@ pub async fn plain_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, AppError> {
-    let ctx = extract_client_context(&headers).map_err(|e| AppError::Cf(e.to_string()))?;
+    let ctx = extract_client_context(&headers, &state.config.proxy_mode)
+        .map_err(|e| AppError::Cf(e.to_string()))?;
 
     let asn_info = state.asn_db.lookup(ctx.ip);
 

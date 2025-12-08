@@ -1,6 +1,6 @@
 [Unit]
-Description=CloakProbe - Privacy-first IP information service
-Documentation=https://github.com/drmckay/cloakprobe
+Description=CloakProbe IP Info Service (%i)
+Documentation=https://cloakprobe.dev
 After=network.target
 
 [Service]
@@ -9,14 +9,17 @@ User=cloakprobe
 Group=cloakprobe
 WorkingDirectory=/opt/cloakprobe
 
-# Use TOML configuration file
-ExecStart=/opt/cloakprobe/cloakprobe -c /etc/cloakprobe/cloakprobe.toml
+# Instance-specific configuration: /etc/cloakprobe/%i.toml
+# Usage: systemctl start cloakprobe@cloudflare
+#        systemctl start cloakprobe@nginx
+#        systemctl start cloakprobe@ipv6
+ExecStart=/opt/cloakprobe/cloakprobe -c /etc/cloakprobe/%i.toml
 
 Restart=always
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=cloakprobe
+SyslogIdentifier=cloakprobe-%i
 
 # Security hardening
 NoNewPrivileges=true
@@ -32,3 +35,4 @@ MemoryMax=512M
 
 [Install]
 WantedBy=multi-user.target
+

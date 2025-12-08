@@ -1,0 +1,73 @@
+# CloakProbe Configuration File
+# =============================
+#
+# Copy this file to one of these locations:
+#   - ./cloakprobe.toml (current directory)
+#   - /etc/cloakprobe/cloakprobe.toml (system-wide)
+#
+# Or specify a custom path with: cloakprobe -c /path/to/config.toml
+#
+# Environment variables can override any value (for container deployments):
+#   CLOAKPROBE_BIND_ADDRESS, CLOAKPROBE_PORT, CLOAKPROBE_MODE,
+#   CLOAKPROBE_REGION, CLOAKPROBE_PRIVACY_MODE,
+#   CLOAKPROBE_ASN_DB_PATH, CLOAKPROBE_RIPE_DB_PATH
+
+# =============================================================================
+# Server Configuration
+# =============================================================================
+[server]
+
+# IP address to bind the HTTP server to
+# Use "0.0.0.0" to listen on all interfaces
+# Use "127.0.0.1" for localhost only (behind reverse proxy)
+bind_address = "0.0.0.0"
+
+# Port number to listen on
+port = 8080
+
+# Proxy mode determines which HTTP headers to trust for client IP extraction
+#
+# "cloudflare" - Trust CF-Connecting-IP header (Cloudflare origin server)
+#                Use this when running behind Cloudflare CDN/proxy
+#
+# "nginx"      - Trust X-Real-IP and X-Forwarded-For headers
+#                Use this when running behind nginx, HAProxy, or other
+#                standard reverse proxies
+#
+mode = "cloudflare"
+
+# Server region identifier (optional)
+# Displayed in the UI and API responses for multi-region deployments
+# Example: "eu-central", "us-east-1", "asia-pacific"
+# region = "eu-central"
+
+# =============================================================================
+# Privacy Configuration
+# =============================================================================
+[privacy]
+
+# Privacy mode affects data handling and retention policies
+#
+# "strict"   - Maximum privacy: no logging, no data retention,
+#              minimal information exposure (default)
+#
+# "balanced" - Standard privacy: basic access logging for security,
+#              aggregate analytics only
+#
+mode = "strict"
+
+# =============================================================================
+# Database Configuration
+# =============================================================================
+[database]
+
+# Path to the ASN (Autonomous System Number) database
+# This database provides IP-to-ASN mapping for network information
+# Required for ASN, AS name, prefix, and RIR information
+asn_db_path = "data/asn_db.bin"
+
+# Path to the RIPE organization database (optional)
+# This database provides additional organization details from RIPE NCC
+# Optional: enhances ASN information with organization names
+ripe_db_path = "data/ripe_db.bin"
+
