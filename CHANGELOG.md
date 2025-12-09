@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2025-12-09
+
 ### Added
 - TOML configuration file support (`cloakprobe.toml`)
   - Structured configuration with `[server]`, `[privacy]`, and `[database]` sections
@@ -86,7 +88,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configurable port via environment variable
 - Privacy modes (strict, balanced)
 
-[Unreleased]: https://github.com/drmckay/cloakprobe/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/drmckay/cloakprobe/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/drmckay/cloakprobe/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/drmckay/cloakprobe/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/drmckay/cloakprobe/releases/tag/v0.1.0
 
