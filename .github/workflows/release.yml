@@ -204,6 +204,7 @@ jobs:
           mkdir -p "${PACKAGE_DIR}/scripts"
           mkdir -p "${PACKAGE_DIR}/systemd"
           mkdir -p "${PACKAGE_DIR}/templates"
+          mkdir -p "${PACKAGE_DIR}/docs"
           
           # Copy binaries
           cp binaries/cloakprobe "${PACKAGE_DIR}/"
@@ -222,16 +223,21 @@ jobs:
           cp scripts/update_ripe_db.sh "${PACKAGE_DIR}/scripts/"
           chmod +x "${PACKAGE_DIR}/scripts/"*.sh
           
-          # Copy systemd service
+          # Copy systemd services
           cp systemd/cloakprobe.service "${PACKAGE_DIR}/systemd/"
+          cp systemd/cloakprobe@.service "${PACKAGE_DIR}/systemd/"
           
           # Copy templates
           cp -r templates/* "${PACKAGE_DIR}/templates/"
+          
+          # Copy configuration
+          cp cloakprobe.example.toml "${PACKAGE_DIR}/"
           
           # Copy documentation
           cp README.md "${PACKAGE_DIR}/"
           cp LICENSE "${PACKAGE_DIR}/"
           cp CHANGELOG.md "${PACKAGE_DIR}/"
+          cp -r docs/* "${PACKAGE_DIR}/docs/" 2>/dev/null || true
           
           # Create tarball
           tar -czvf "${PACKAGE_NAME}.tar.gz" "${PACKAGE_DIR}"
@@ -335,11 +341,13 @@ jobs:
           - \`cloakprobe\` - Main binary
           - \`asn_builder\` - ASN database builder
           - \`ripe_builder\` - RIPE organization database builder
+          - \`cloakprobe.example.toml\` - Example configuration file
           - \`data/asn_db.bin\` - Pre-built ASN database (from iptoasn.com)
           - \`data/ripe_db.bin\` - Pre-built RIPE organization database
           - \`templates/\` - HTML templates
           - \`scripts/\` - Database update scripts
-          - \`systemd/\` - Systemd service file
+          - \`systemd/\` - Systemd service files (single and multi-instance)
+          - \`docs/\` - Deployment documentation (nginx setup guide)
           - \`README.md\`, \`LICENSE\`, \`CHANGELOG.md\`
           
           ### Quick Start
@@ -353,8 +361,12 @@ jobs:
           # Verify checksum
           sha256sum -c ../cloakprobe-${VERSION}-linux-x86_64.tar.gz.sha256
           
+          # Setup configuration
+          sudo mkdir -p /etc/cloakprobe
+          sudo cp cloakprobe.example.toml /etc/cloakprobe/cloakprobe.toml
+          
           # Run
-          ./cloakprobe
+          ./cloakprobe -c /etc/cloakprobe/cloakprobe.toml
           \`\`\`
           
           For full installation and deployment instructions, see the [documentation](https://cloakprobe.dev/docs/).
