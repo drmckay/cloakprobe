@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Planned multi-RIR organization database integration (RIPE, ARIN, APNIC, LACNIC, AFRINIC)
+- Normalized org schema (ASN → org_id, org_name, country, RIR, org_type, abuse_contact, last_updated)
+- Org-builder plan with RIR-specific parsers, provenance, and conflict handling
+- UI/API enrichment plan: show org name + RIR + country, org type tag, abuse-contact indicator, data freshness badge
+
 ## [0.1.2] - 2025-12-09
 
 ### Added
