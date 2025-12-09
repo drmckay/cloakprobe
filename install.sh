@@ -137,16 +137,14 @@ detect_arch() {
     local arch=$(uname -m)
     case "$arch" in
         x86_64)
-            echo "x86_64-unknown-linux-gnu"
+            echo "x86_64"
             ;;
         aarch64|arm64)
-            echo "aarch64-unknown-linux-gnu"
-            ;;
-        armv7l)
-            echo "armv7-unknown-linux-gnueabihf"
+            echo "aarch64"
             ;;
         *)
             log_error "Unsupported architecture: $arch"
+            log_error "Supported architectures: x86_64, aarch64"
             exit 1
             ;;
     esac
@@ -163,9 +161,12 @@ download_release() {
     local repo=$1
     local version=$2
     local arch=$3
-    local download_url="https://github.com/${repo}/releases/download/${version}/${BINARY_NAME}-${arch}.tar.gz"
+    # Version without 'v' prefix for filename
+    local version_num="${version#v}"
+    # New filename format: cloakprobe-VERSION-linux-ARCH.tar.gz
+    local download_url="https://github.com/${repo}/releases/download/${version}/${BINARY_NAME}-${version_num}-linux-${arch}.tar.gz"
     
-    log_info "Downloading release ${version} for ${arch}..."
+    log_info "Downloading release ${version} for linux-${arch}..."
     log_info "URL: ${download_url}"
     
     if ! curl -L -f -o /tmp/cloakprobe.tar.gz "${download_url}"; then
