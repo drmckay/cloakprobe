@@ -188,6 +188,7 @@ install_binary() {
     
     # Extract archive to temp directory
     local temp_extract="/tmp/cloakprobe_extract"
+    rm -rf "${temp_extract}"
     mkdir -p "${temp_extract}"
     tar -xzf /tmp/cloakprobe.tar.gz -C "${temp_extract}"
     
@@ -195,10 +196,15 @@ install_binary() {
     # New format: cloakprobe-VERSION-linux-ARCH/
     # Old format: files directly in extract dir
     local package_dir="${temp_extract}"
-    if [[ -d "${temp_extract}"/cloakprobe-* ]]; then
-        package_dir=$(find "${temp_extract}" -maxdepth 1 -type d -name "cloakprobe-*" | head -1)
-        log_info "Found package directory: $(basename ${package_dir})"
+    local subdir
+    subdir=$(find "${temp_extract}" -maxdepth 1 -type d -name "cloakprobe-*" 2>/dev/null | head -1)
+    if [[ -n "${subdir}" && -d "${subdir}" ]]; then
+        package_dir="${subdir}"
+        log_info "Found package directory: $(basename "${package_dir}")"
     fi
+    
+    # Debug: list contents
+    log_info "Package contents: $(ls -1 "${package_dir}" | head -5 | tr '\n' ' ')..."
     
     # Copy binary
     if [[ -f "${package_dir}/${BINARY_NAME}" ]]; then
