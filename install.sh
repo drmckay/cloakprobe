@@ -191,9 +191,18 @@ install_binary() {
     mkdir -p "${temp_extract}"
     tar -xzf /tmp/cloakprobe.tar.gz -C "${temp_extract}"
     
+    # Find the extracted directory (handles both old and new package formats)
+    # New format: cloakprobe-VERSION-linux-ARCH/
+    # Old format: files directly in extract dir
+    local package_dir="${temp_extract}"
+    if [[ -d "${temp_extract}"/cloakprobe-* ]]; then
+        package_dir=$(find "${temp_extract}" -maxdepth 1 -type d -name "cloakprobe-*" | head -1)
+        log_info "Found package directory: $(basename ${package_dir})"
+    fi
+    
     # Copy binary
-    if [[ -f "${temp_extract}/${BINARY_NAME}" ]]; then
-        cp "${temp_extract}/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}"
+    if [[ -f "${package_dir}/${BINARY_NAME}" ]]; then
+        cp "${package_dir}/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}"
         chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
         log_info "Binary installed"
     else
@@ -202,27 +211,33 @@ install_binary() {
     fi
     
     # Copy ASN database if it exists
-    if [[ -f "${temp_extract}/data/asn_db.bin" ]]; then
-        cp "${temp_extract}/data/asn_db.bin" "${INSTALL_DIR}/data/asn_db.bin"
+    if [[ -f "${package_dir}/data/asn_db.bin" ]]; then
+        cp "${package_dir}/data/asn_db.bin" "${INSTALL_DIR}/data/asn_db.bin"
         log_info "ASN database installed"
     else
         log_warn "ASN database not found in archive"
     fi
     
+    # Copy RIPE database if it exists
+    if [[ -f "${package_dir}/data/ripe_db.bin" ]]; then
+        cp "${package_dir}/data/ripe_db.bin" "${INSTALL_DIR}/data/ripe_db.bin"
+        log_info "RIPE database installed"
+    fi
+    
     # Copy templates if they exist
-    if [[ -d "${temp_extract}/templates" ]]; then
-        cp -r "${temp_extract}/templates/"* "${INSTALL_DIR}/templates/" 2>/dev/null || true
+    if [[ -d "${package_dir}/templates" ]]; then
+        cp -r "${package_dir}/templates/"* "${INSTALL_DIR}/templates/" 2>/dev/null || true
         log_info "Templates installed"
     fi
     
     # Copy and install configuration file
-    if [[ -f "${temp_extract}/${CONFIG_FILE}" ]]; then
+    if [[ -f "${package_dir}/${CONFIG_FILE}" ]]; then
         # Copy example to install dir
-        cp "${temp_extract}/${CONFIG_FILE}" "${INSTALL_DIR}/${CONFIG_FILE}"
+        cp "${package_dir}/${CONFIG_FILE}" "${INSTALL_DIR}/${CONFIG_FILE}"
         
         # Create default config if it doesn't exist
         if [[ ! -f "${CONFIG_DIR}/cloakprobe.toml" ]]; then
-            cp "${temp_extract}/${CONFIG_FILE}" "${CONFIG_DIR}/cloakprobe.toml"
+            cp "${package_dir}/${CONFIG_FILE}" "${CONFIG_DIR}/cloakprobe.toml"
             # Update paths in config for installed location
             sed -i "s|data/asn_db.bin|${INSTALL_DIR}/data/asn_db.bin|g" "${CONFIG_DIR}/cloakprobe.toml"
             sed -i "s|data/ripe_db.bin|${INSTALL_DIR}/data/ripe_db.bin|g" "${CONFIG_DIR}/cloakprobe.toml"
@@ -232,42 +247,48 @@ install_binary() {
         fi
     fi
     
-    # Copy service file if it exists
-    if [[ -f "${temp_extract}/${SERVICE_FILE}" ]]; then
-        cp "${temp_extract}/${SERVICE_FILE}" "${INSTALL_DIR}/${SERVICE_FILE}"
+    # Copy service files if they exist
+    if [[ -f "${package_dir}/${SERVICE_FILE}" ]]; then
+        mkdir -p "${INSTALL_DIR}/systemd"
+        cp "${package_dir}/${SERVICE_FILE}" "${INSTALL_DIR}/${SERVICE_FILE}"
         log_info "Service file installed"
     fi
     
+    if [[ -f "${package_dir}/systemd/cloakprobe@.service" ]]; then
+        cp "${package_dir}/systemd/cloakprobe@.service" "${INSTALL_DIR}/systemd/cloakprobe@.service"
+        log_info "Multi-instance service template installed"
+    fi
+    
     # Copy builder binaries if they exist
-    if [[ -f "${temp_extract}/${BUILDER_BINARY}" ]]; then
-        cp "${temp_extract}/${BUILDER_BINARY}" "${INSTALL_DIR}/${BUILDER_BINARY}"
+    if [[ -f "${package_dir}/${BUILDER_BINARY}" ]]; then
+        cp "${package_dir}/${BUILDER_BINARY}" "${INSTALL_DIR}/${BUILDER_BINARY}"
         chmod +x "${INSTALL_DIR}/${BUILDER_BINARY}"
         log_info "asn_builder binary installed"
     fi
     
-    if [[ -f "${temp_extract}/${RIPE_BUILDER_BINARY}" ]]; then
-        cp "${temp_extract}/${RIPE_BUILDER_BINARY}" "${INSTALL_DIR}/${RIPE_BUILDER_BINARY}"
+    if [[ -f "${package_dir}/${RIPE_BUILDER_BINARY}" ]]; then
+        cp "${package_dir}/${RIPE_BUILDER_BINARY}" "${INSTALL_DIR}/${RIPE_BUILDER_BINARY}"
         chmod +x "${INSTALL_DIR}/${RIPE_BUILDER_BINARY}"
         log_info "ripe_builder binary installed"
     fi
     
     # Copy update scripts if they exist
-    if [[ -f "${temp_extract}/scripts/update_asn_db.sh" ]]; then
-        cp "${temp_extract}/scripts/update_asn_db.sh" "${INSTALL_DIR}/scripts/update_asn_db.sh"
+    if [[ -f "${package_dir}/scripts/update_asn_db.sh" ]]; then
+        cp "${package_dir}/scripts/update_asn_db.sh" "${INSTALL_DIR}/scripts/update_asn_db.sh"
         chmod +x "${INSTALL_DIR}/scripts/update_asn_db.sh"
         log_info "ASN update script installed"
     fi
     
-    if [[ -f "${temp_extract}/scripts/update_ripe_db.sh" ]]; then
-        cp "${temp_extract}/scripts/update_ripe_db.sh" "${INSTALL_DIR}/scripts/update_ripe_db.sh"
+    if [[ -f "${package_dir}/scripts/update_ripe_db.sh" ]]; then
+        cp "${package_dir}/scripts/update_ripe_db.sh" "${INSTALL_DIR}/scripts/update_ripe_db.sh"
         chmod +x "${INSTALL_DIR}/scripts/update_ripe_db.sh"
         log_info "RIPE organization update script installed"
     fi
     
-    # Copy nginx snippets if they exist
-    if [[ -d "${temp_extract}/docs" ]]; then
+    # Copy documentation if it exists
+    if [[ -d "${package_dir}/docs" ]]; then
         mkdir -p "${INSTALL_DIR}/docs"
-        cp -r "${temp_extract}/docs/"* "${INSTALL_DIR}/docs/" 2>/dev/null || true
+        cp -r "${package_dir}/docs/"* "${INSTALL_DIR}/docs/" 2>/dev/null || true
         log_info "Documentation installed"
     fi
     
