@@ -18,7 +18,9 @@ SERVICE_GROUP="cloakprobe"
 GITHUB_REPO="drmckay/cloakprobe"
 BINARY_NAME="cloakprobe"
 BUILDER_BINARY="asn_builder"
-RIPE_BUILDER_BINARY="ripe_builder"
+ORG_BUILDER_BINARY="org_builder"
+ORG_BUILDER_RPSL_BINARY="org_builder_rpsl"
+ORG_BUILDER_ARIN_BINARY="org_builder_arin"
 SERVICE_FILE="systemd/cloakprobe.service"
 CONFIG_FILE="cloakprobe.example.toml"
 
@@ -224,10 +226,10 @@ install_binary() {
         log_warn "ASN database not found in archive"
     fi
     
-    # Copy RIPE database if it exists
-    if [[ -f "${package_dir}/data/ripe_db.bin" ]]; then
-        cp "${package_dir}/data/ripe_db.bin" "${INSTALL_DIR}/data/ripe_db.bin"
-        log_info "RIPE database installed"
+    # Copy multi-RIR organization database if it exists
+    if [[ -f "${package_dir}/data/orgs_db.bin" ]]; then
+        cp "${package_dir}/data/orgs_db.bin" "${INSTALL_DIR}/data/orgs_db.bin"
+        log_info "Multi-RIR organization database installed"
     fi
     
     # Copy templates if they exist
@@ -246,7 +248,7 @@ install_binary() {
             cp "${package_dir}/${CONFIG_FILE}" "${CONFIG_DIR}/cloakprobe.toml"
             # Update paths in config for installed location
             sed -i "s|data/asn_db.bin|${INSTALL_DIR}/data/asn_db.bin|g" "${CONFIG_DIR}/cloakprobe.toml"
-            sed -i "s|data/ripe_db.bin|${INSTALL_DIR}/data/ripe_db.bin|g" "${CONFIG_DIR}/cloakprobe.toml"
+            sed -i "s|data/orgs_db.bin|${INSTALL_DIR}/data/orgs_db.bin|g" "${CONFIG_DIR}/cloakprobe.toml"
             log_info "Configuration file installed to ${CONFIG_DIR}/cloakprobe.toml"
         else
             log_info "Configuration file already exists, skipping"
@@ -272,10 +274,22 @@ install_binary() {
         log_info "asn_builder binary installed"
     fi
     
-    if [[ -f "${package_dir}/${RIPE_BUILDER_BINARY}" ]]; then
-        cp "${package_dir}/${RIPE_BUILDER_BINARY}" "${INSTALL_DIR}/${RIPE_BUILDER_BINARY}"
-        chmod +x "${INSTALL_DIR}/${RIPE_BUILDER_BINARY}"
-        log_info "ripe_builder binary installed"
+    if [[ -f "${package_dir}/${ORG_BUILDER_BINARY}" ]]; then
+        cp "${package_dir}/${ORG_BUILDER_BINARY}" "${INSTALL_DIR}/${ORG_BUILDER_BINARY}"
+        chmod +x "${INSTALL_DIR}/${ORG_BUILDER_BINARY}"
+        log_info "org_builder binary installed"
+    fi
+    
+    if [[ -f "${package_dir}/${ORG_BUILDER_RPSL_BINARY}" ]]; then
+        cp "${package_dir}/${ORG_BUILDER_RPSL_BINARY}" "${INSTALL_DIR}/${ORG_BUILDER_RPSL_BINARY}"
+        chmod +x "${INSTALL_DIR}/${ORG_BUILDER_RPSL_BINARY}"
+        log_info "org_builder_rpsl binary installed"
+    fi
+    
+    if [[ -f "${package_dir}/${ORG_BUILDER_ARIN_BINARY}" ]]; then
+        cp "${package_dir}/${ORG_BUILDER_ARIN_BINARY}" "${INSTALL_DIR}/${ORG_BUILDER_ARIN_BINARY}"
+        chmod +x "${INSTALL_DIR}/${ORG_BUILDER_ARIN_BINARY}"
+        log_info "org_builder_arin binary installed"
     fi
     
     # Copy update scripts if they exist
@@ -285,10 +299,16 @@ install_binary() {
         log_info "ASN update script installed"
     fi
     
-    if [[ -f "${package_dir}/scripts/update_ripe_db.sh" ]]; then
-        cp "${package_dir}/scripts/update_ripe_db.sh" "${INSTALL_DIR}/scripts/update_ripe_db.sh"
-        chmod +x "${INSTALL_DIR}/scripts/update_ripe_db.sh"
-        log_info "RIPE organization update script installed"
+    if [[ -f "${package_dir}/scripts/update_org_db.sh" ]]; then
+        cp "${package_dir}/scripts/update_org_db.sh" "${INSTALL_DIR}/scripts/update_org_db.sh"
+        chmod +x "${INSTALL_DIR}/scripts/update_org_db.sh"
+        log_info "Multi-RIR organization update script installed"
+    fi
+    
+    if [[ -f "${package_dir}/scripts/download_rir_orgs.sh" ]]; then
+        cp "${package_dir}/scripts/download_rir_orgs.sh" "${INSTALL_DIR}/scripts/download_rir_orgs.sh"
+        chmod +x "${INSTALL_DIR}/scripts/download_rir_orgs.sh"
+        log_info "RIR data download script installed"
     fi
     
     # Copy documentation if it exists
@@ -489,8 +509,8 @@ print_summary() {
         ((step++))
     fi
     
-    echo "  ${step}. (Optional) Download RIPE organization database:"
-    echo "     sudo ${INSTALL_DIR}/scripts/update_ripe_db.sh"
+    echo "  ${step}. (Optional) Download multi-RIR organization database:"
+    echo "     sudo ${INSTALL_DIR}/scripts/update_org_db.sh"
     echo ""
     ((step++))
     
@@ -524,10 +544,10 @@ print_summary() {
             echo "  ⚠️  ASN database updates not configured"
         fi
         
-        if crontab -u "${SERVICE_USER}" -l 2>/dev/null | grep -q "${INSTALL_DIR}/scripts/update_ripe_db.sh"; then
-            echo "  ✅ RIPE organization database updates configured (daily at 4:00 AM)"
+        if crontab -u "${SERVICE_USER}" -l 2>/dev/null | grep -q "${INSTALL_DIR}/scripts/update_org_db.sh"; then
+            echo "  ✅ Multi-RIR organization database updates configured (weekly on Sunday at 4:00 AM)"
         else
-            echo "  ⚠️  RIPE organization database updates not configured"
+            echo "  ⚠️  Multi-RIR organization database updates not configured"
         fi
         
         if ! crontab -u "${SERVICE_USER}" -l 2>/dev/null | grep -q "${INSTALL_DIR}/scripts/update"; then
@@ -536,7 +556,7 @@ print_summary() {
             echo "    sudo crontab -u ${SERVICE_USER} -e"
             echo "    Add:"
             echo "      0 3 * * * ${INSTALL_DIR}/scripts/update_asn_db.sh >> /var/log/cloakprobe/asn-update.log 2>&1"
-            echo "      0 4 * * * ${INSTALL_DIR}/scripts/update_ripe_db.sh >> /var/log/cloakprobe/ripe-update.log 2>&1"
+            echo "      0 4 * * 0 ${INSTALL_DIR}/scripts/update_org_db.sh >> /var/log/cloakprobe/org-update.log 2>&1"
         fi
     else
         echo "  ⚠️  crontab not found, automatic updates not configured"

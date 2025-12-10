@@ -263,12 +263,24 @@
       font-style: italic;
       font-size: 0.9rem;
     }
+    .dns-separator {
+      color: var(--text-muted);
+      font-size: 3rem;
+      font-weight: 200;
+      align-self: center;
+      padding: 0 1.5rem;
+      line-height: 1;
+    }
     @media (max-width: 768px) {
       .grid {
         grid-template-columns: 1fr;
       }
       .ip-display {
         padding: 2rem 1.5rem;
+      }
+      .dns-separator {
+        display: none !important;
+      }
       }
       body {
         padding: 1rem 0.5rem;
@@ -319,14 +331,24 @@
         </button>
       </div>
       <div id="reverse-dns-result-container" style="display: none; margin-top: 1.5rem;">
-        <div class="ip-label">Reverse DNS (PTR)</div>
-        <div class="ip-value-container">
-          <div class="ip-value" id="reverse-dns-value" style="font-size: clamp(1.5rem, 4vw, 2.5rem);"></div>
-          <button class="copy-btn" id="reverse-dns-copy-btn" onclick="copyHostname()" title="Copy to clipboard" style="display: none;">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
-          </button>
+        <div style="display: flex; align-items: flex-start; gap: 2rem; flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 250px;">
+            <div class="ip-label">Reverse DNS (PTR)</div>
+            <div class="ip-value-container">
+              <div class="ip-value" id="reverse-dns-value" style="font-size: clamp(1.5rem, 4vw, 2.5rem);"></div>
+              <button class="copy-btn" id="reverse-dns-copy-btn" onclick="copyHostname()" title="Copy to clipboard" style="display: none;">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div id="dns-separator" class="dns-separator" style="display: none;">|</div>
+          <div id="ns-hint-wrapper" style="display: none; flex: 1; min-width: 250px;">
+            <div class="ip-label">Authoritative NS (ISP Hint)</div>
+            <div class="ip-value" id="ns-hint-value" style="font-size: clamp(1rem, 3vw, 1.75rem); color: var(--accent-secondary); margin-bottom: 0.5rem;"></div>
+            <div id="ns-hint-details" style="font-size: 0.85rem; color: var(--text-muted);"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -334,9 +356,10 @@
     <div class="grid">
       <div class="card">
         <div class="card-title">IP Address Details</div>
+        {% if ip_version == 4 %}
         <div class="info-row">
-          <span class="info-label">Decimal Format</span>
-          <span class="info-value"><code>{{ ip_decimal }}</code></span>
+          <span class="info-label">Dotted Decimal</span>
+          <span class="info-value"><code>{{ ip_primary }}</code></span>
         </div>
         <div class="info-row">
           <span class="info-label">Hexadecimal</span>
@@ -347,9 +370,39 @@
           <span class="info-value"><code style="font-size: 0.75em;">{{ ip_binary }}</code></span>
         </div>
         <div class="info-row">
-          <span class="info-label">Numeric Value</span>
+          <span class="info-label">Numeric (u32)</span>
           <span class="info-value"><code>{{ ip_numeric }}</code></span>
         </div>
+        <div class="info-row">
+          <span class="info-label">/24 Subnet</span>
+          <span class="info-value"><code>{{ ip_subnet }}</code></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Subnet Size</span>
+          <span class="info-value"><code>{{ ip_subnet_size }}</code></span>
+        </div>
+        {% else %}
+        <div class="info-row">
+          <span class="info-label">Standard Notation</span>
+          <span class="info-value"><code>{{ ip_primary }}</code></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Full Expanded</span>
+          <span class="info-value"><code style="font-size: 0.8em;">{{ ip_expanded }}</code></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Binary Format</span>
+          <span class="info-value"><code style="font-size: 0.6em; word-break: break-all;">{{ ip_binary }}</code></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">/64 Network</span>
+          <span class="info-value"><code style="font-size: 0.85em;">{{ ip_subnet }}</code></span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Network Size</span>
+          <span class="info-value"><code>{{ ip_subnet_size }}</code></span>
+        </div>
+        {% endif %}
         <div class="info-row">
           <span class="info-label">Address Type</span>
           <span class="info-value"><span class="badge badge-info">{{ ip_type }}</span></span>
@@ -370,10 +423,12 @@
           <span class="info-label">Network Prefix</span>
           <span class="info-value"><code>{{ prefix }}</code></span>
         </div>
+        {% if org_rir != "—" %}
         <div class="info-row">
           <span class="info-label">RIR</span>
-          <span class="info-value"><code>{{ rir }}</code></span>
+          <span class="info-value"><code>{{ org_rir }}</code></span>
         </div>
+        {% endif %}
         <div class="info-row">
           <span class="info-label">Country Code</span>
           <span class="info-value"><code>{{ country }}</code></span>
@@ -382,6 +437,30 @@
           <span class="info-label">Organization</span>
           <span class="info-value"><code>{{ org_name }}</code></span>
         </div>
+        {% if org_id != "—" %}
+        <div class="info-row">
+          <span class="info-label">Org ID</span>
+          <span class="info-value"><code>{{ org_id }}</code></span>
+        </div>
+        {% endif %}
+        {% if org_type != "—" %}
+        <div class="info-row">
+          <span class="info-label">Org Type</span>
+          <span class="info-value"><code>{{ org_type }}</code></span>
+        </div>
+        {% endif %}
+        {% if abuse_contact != "—" %}
+        <div class="info-row">
+          <span class="info-label">Abuse Contact</span>
+          <span class="info-value"><code>{{ abuse_contact }}</code></span>
+        </div>
+        {% endif %}
+        {% if org_last_updated != "—" %}
+        <div class="info-row">
+          <span class="info-label">Org Last Updated</span>
+          <span class="info-value"><code>{{ org_last_updated }}</code></span>
+        </div>
+        {% endif %}
       </div>
 
       <div class="card">
@@ -400,14 +479,18 @@
           <span class="info-label">HTTP Protocol</span>
           <span class="info-value"><code>{{ http_protocol }}</code></span>
         </div>
+        {% if cf_ray != "—" %}
         <div class="info-row">
           <span class="info-label">CF-Ray</span>
           <span class="info-value"><code>{{ cf_ray }}</code></span>
         </div>
+        {% endif %}
+        {% if datacenter != "—" %}
         <div class="info-row">
           <span class="info-label">Datacenter</span>
           <span class="info-value"><code>{{ datacenter }}</code></span>
         </div>
+        {% endif %}
         {% if cf_request_id != "—" %}
         <div class="info-row">
           <span class="info-label">CF-Request-ID</span>
@@ -420,8 +503,75 @@
           <span class="info-value"><code>{{ cf_cache_status }}</code></span>
         </div>
         {% endif %}
+        {# Nginx-specific connection fields #}
+        {% if not is_cloudflare_mode %}
+        {% if request_id != "—" %}
+        <div class="info-row">
+          <span class="info-label">Request ID</span>
+          <span class="info-value"><code>{{ request_id }}</code></span>
+        </div>
+        {% endif %}
+        {% if remote_port != "—" %}
+        <div class="info-row">
+          <span class="info-label">Client Port</span>
+          <span class="info-value"><code>{{ remote_port }}</code></span>
+        </div>
+        {% endif %}
+        {% if connection_id != "—" %}
+        <div class="info-row">
+          <span class="info-label">Connection ID</span>
+          <span class="info-value"><code>{{ connection_id }}</code></span>
+        </div>
+        {% endif %}
+        {% endif %}
       </div>
 
+      {# Nginx GeoIP Card (only in nginx mode with GeoIP data) #}
+      {% if not is_cloudflare_mode %}
+      {% if geoip_country != "—" or geoip_city != "—" or geoip_region != "—" %}
+      <div class="card">
+        <div class="card-title">Geo Location (GeoIP)</div>
+        {% if geoip_country != "—" %}
+        <div class="info-row">
+          <span class="info-label">Country</span>
+          <span class="info-value"><code>{{ geoip_country }}</code></span>
+        </div>
+        {% endif %}
+        {% if geoip_city != "—" %}
+        <div class="info-row">
+          <span class="info-label">City</span>
+          <span class="info-value"><code>{{ geoip_city }}</code></span>
+        </div>
+        {% endif %}
+        {% if geoip_region != "—" %}
+        <div class="info-row">
+          <span class="info-label">Region</span>
+          <span class="info-value"><code>{{ geoip_region }}</code></span>
+        </div>
+        {% endif %}
+        {% if geoip_latitude != "—" and geoip_longitude != "—" %}
+        <div class="info-row">
+          <span class="info-label">Coordinates</span>
+          <span class="info-value"><code>{{ geoip_latitude }}, {{ geoip_longitude }}</code></span>
+        </div>
+        {% endif %}
+        {% if geoip_postal_code != "—" %}
+        <div class="info-row">
+          <span class="info-label">Postal Code</span>
+          <span class="info-value"><code>{{ geoip_postal_code }}</code></span>
+        </div>
+        {% endif %}
+        {% if geoip_org != "—" %}
+        <div class="info-row">
+          <span class="info-label">Organization</span>
+          <span class="info-value"><code>{{ geoip_org }}</code></span>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+      {% endif %}
+
+      {% if is_cloudflare_mode %}
       <div class="card">
         <div class="card-title">Cloudflare Headers</div>
         {% if geo_location_items %}
@@ -480,6 +630,20 @@
         </div>
         {% endif %}
       </div>
+      {% else %}
+      {# Nginx mode: Show only proxy headers if available #}
+      {% if proxy_items %}
+      <div class="card">
+        <div class="card-title">Proxy Headers</div>
+        {% for item in proxy_items %}
+        <div class="info-row">
+          <span class="info-label">{{ item.label }}</span>
+          <span class="info-value"><code>{{ item.value }}</code></span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% endif %}
 
       <div class="card">
         <div class="card-title">Client Information</div>
@@ -621,6 +785,10 @@
           <span class="info-label">Privacy Mode</span>
           <span class="info-value"><span class="badge badge-success">{{ privacy_mode }}</span></span>
         </div>
+        <div class="info-row">
+          <span class="info-label">Response Time</span>
+          <span class="info-value"><code>{{ response_time_ms }} ms</code></span>
+        </div>
       </div>
     </div>
 
@@ -683,6 +851,123 @@
       return null;
     }
 
+    // Get reverse DNS zone for NS lookup (different from PTR query name)
+    function getReverseDNSZone(ip) {
+      if (ip.includes('.')) {
+        // IPv4: For NS lookup we need the zone, not full PTR name
+        // e.g., for 8.8.8.8 -> try 8.8.8.in-addr.arpa first
+        const parts = ip.split('.').reverse();
+        return parts.slice(1).join('.') + '.in-addr.arpa';
+      } else if (ip.includes(':')) {
+        // IPv6: Get zone (typically /48 or /32 delegation)
+        const expandIPv6 = (ip) => {
+          const parts = ip.split('::');
+          if (parts.length === 2) {
+            const left = parts[0].split(':').filter(p => p);
+            const right = parts[1].split(':').filter(p => p);
+            const missing = 8 - left.length - right.length;
+            const zeros = Array(missing).fill('0');
+            return [...left, ...zeros, ...right].map(p => p.padStart(4, '0'));
+          } else {
+            return ip.split(':').map(p => p.padStart(4, '0'));
+          }
+        };
+        
+        const expanded = expandIPv6(ip);
+        // For IPv6, typically try /48 zone (first 12 nibbles)
+        const nibbles = expanded.join('').split('').reverse();
+        return nibbles.slice(20).join('.') + '.ip6.arpa';
+      }
+      return null;
+    }
+
+    // Extract ISP hint from NS hostname
+    function extractISPHint(nsHostname) {
+      // Remove trailing dot if present
+      let host = nsHostname.replace(/\.$/, '').toLowerCase();
+      
+      // Extract main domain (last 2-3 parts depending on TLD)
+      const parts = host.split('.');
+      if (parts.length < 2) return host;
+      
+      // Check for common ccTLDs with second-level domains (co.uk, com.au, etc.)
+      const twoPartTLDs = ['co.uk', 'com.au', 'co.jp', 'com.br', 'co.nz', 'co.za', 'org.uk', 'net.au'];
+      const lastTwo = parts.slice(-2).join('.');
+      
+      if (twoPartTLDs.includes(lastTwo) && parts.length >= 3) {
+        return parts.slice(-3).join('.');
+      }
+      
+      return parts.slice(-2).join('.');
+    }
+
+    // Lookup authoritative NS for the IP's reverse zone
+    async function lookupAuthoritativeNS(ip) {
+      const nsWrapper = document.getElementById('ns-hint-wrapper');
+      const nsValue = document.getElementById('ns-hint-value');
+      const nsDetails = document.getElementById('ns-hint-details');
+      const separator = document.getElementById('dns-separator');
+      
+      nsWrapper.style.display = 'none';
+      separator.style.display = 'none';
+      
+      try {
+        const zone = getReverseDNSZone(ip);
+        if (!zone) return;
+        
+        // Query NS records for the zone
+        const dohUrl = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(zone)}&type=NS`;
+        const response = await fetch(dohUrl, {
+          method: 'GET',
+          headers: { 'Accept': 'application/dns-json' }
+        });
+        
+        if (!response.ok) return;
+        
+        const data = await response.json();
+        
+        if (data.Answer && data.Answer.length > 0) {
+          // Get unique ISP hints from all NS records
+          const nsHostnames = data.Answer.map(a => a.data);
+          const ispHints = [...new Set(nsHostnames.map(extractISPHint))];
+          
+          // Filter out generic/unhelpful hints
+          const filteredHints = ispHints.filter(h => 
+            !h.includes('in-addr.arpa') && 
+            !h.includes('ip6.arpa') &&
+            !h.includes('cloudflare.com') &&
+            !h.includes('ripe.net') &&
+            h.length > 0
+          );
+          
+          if (filteredHints.length > 0) {
+            nsValue.textContent = filteredHints.join(' • ');
+            nsValue.style.color = 'var(--accent-secondary)';
+            nsDetails.textContent = 'NS: ' + nsHostnames.slice(0, 3).join(', ');
+            nsWrapper.style.display = 'block';
+            separator.style.display = 'block';
+          }
+        } else if (data.Authority && data.Authority.length > 0) {
+          // SOA record may be in Authority section
+          const soaData = data.Authority.find(a => a.type === 6);
+          if (soaData && soaData.data) {
+            const primaryNS = soaData.data.split(' ')[0];
+            const ispHint = extractISPHint(primaryNS);
+            if (ispHint && !ispHint.includes('arpa')) {
+              nsValue.textContent = ispHint;
+              nsValue.style.color = 'var(--accent-secondary)';
+              nsDetails.textContent = 'Primary NS: ' + primaryNS;
+              nsWrapper.style.display = 'block';
+              separator.style.display = 'block';
+            }
+          }
+        }
+      } catch (error) {
+        // Silently fail - NS hint is supplementary info
+        console.log('NS lookup failed:', error);
+      }
+    }
+
     async function lookupReverseDNS() {
       const ip = document.getElementById('ip-value').textContent.trim();
       const btn = document.getElementById('reverse-dns-btn');
@@ -690,6 +975,8 @@
       const resultContainer = document.getElementById('reverse-dns-result-container');
       const resultValue = document.getElementById('reverse-dns-value');
       const copyBtn = document.getElementById('reverse-dns-copy-btn');
+      const nsWrapper = document.getElementById('ns-hint-wrapper');
+      const separator = document.getElementById('dns-separator');
       
       // Disable button and show loading
       btn.disabled = true;
@@ -697,8 +984,11 @@
       btnText.innerHTML = '<span class="spinner"></span> Looking up...';
       resultContainer.style.display = 'none';
       copyBtn.style.display = 'none';
+      nsWrapper.style.display = 'none';
+      separator.style.display = 'none';
       
-      try {
+      // Run PTR and NS lookups in parallel
+      const ptrPromise = (async () => {
         // Convert IP to reverse DNS format
         const reverseDNS = ipToReverseDNS(ip);
         if (!reverseDNS) {
@@ -718,12 +1008,21 @@
           throw new Error(`DNS query failed: ${response.status}`);
         }
         
-        const data = await response.json();
+        return await response.json();
+      })();
+      
+      // Start NS lookup in parallel (don't await yet)
+      const nsPromise = lookupAuthoritativeNS(ip);
+      
+      try {
+        const data = await ptrPromise;
         
         // Check if we have an answer
         if (data.Answer && data.Answer.length > 0) {
           const hostname = data.Answer[0].data;
           resultValue.textContent = hostname;
+          resultValue.style.color = '';
+          resultValue.style.fontStyle = '';
           resultValue.setAttribute('data-hostname', hostname);
           copyBtn.style.display = 'flex';
           resultContainer.style.display = 'block';
@@ -742,12 +1041,15 @@
         resultValue.removeAttribute('data-hostname');
         copyBtn.style.display = 'none';
         resultContainer.style.display = 'block';
-      } finally {
-        // Re-enable button
-        btn.disabled = false;
-        btn.classList.remove('loading');
-        btnText.textContent = 'Lookup Reverse DNS';
       }
+      
+      // Wait for NS lookup to complete
+      await nsPromise;
+      
+      // Re-enable button
+      btn.disabled = false;
+      btn.classList.remove('loading');
+      btnText.textContent = 'Lookup Reverse DNS';
     }
 
     function escapeHtml(text) {

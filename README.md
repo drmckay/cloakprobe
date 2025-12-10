@@ -29,7 +29,9 @@ Privacy-first, security-focused IP information service designed to run behind Cl
 - 🌍 **Cloudflare Worker Headers**: Supports extended Cloudflare Worker headers (X-CF-Country, X-CF-City, X-CF-ASN, X-CF-Trust-Score, etc.)
 - 🔒 **XSS Protection**: All Cloudflare header values are sanitized before HTML rendering
 - 🗄️ **Local ASN Database**: Uses ip2asn-based binary database (`asn_db.bin`)
+- 🏢 **Multi-RIR Organization Data**: Organization details from all 5 RIRs (RIPE, APNIC, LACNIC, AFRINIC, ARIN)
 - 🔍 **Reverse DNS Lookup**: Client-side reverse DNS (PTR) lookup using Cloudflare DNS over HTTPS (DoH) - only on user interaction
+- 🌐 **ISP Hint Detection**: Client-side authoritative NS lookup to identify ISP/provider from nameserver hostnames
 
 ## Requirements
 
@@ -128,7 +130,7 @@ mode = "strict"        # "strict" or "balanced"
 
 [database]
 asn_db_path = "data/asn_db.bin"
-ripe_db_path = "data/ripe_db.bin"
+org_db_path = "data/orgs_db.bin"
 ```
 
 ### Proxy Modes
@@ -157,7 +159,7 @@ Environment variables override TOML config values (useful for containers):
 - `CLOAKPROBE_REGION`: Server region identifier
 - `CLOAKPROBE_PRIVACY_MODE`: Privacy mode (`strict` or `balanced`)
 - `CLOAKPROBE_ASN_DB_PATH`: Path to ASN database
-- `CLOAKPROBE_RIPE_DB_PATH`: Path to RIPE organization database
+- `CLOAKPROBE_ORG_DB_PATH`: Path to multi-RIR organization database
 
 **Note**: If database paths are not specified, CloakProbe will automatically search for databases in the `data/` directory.
 
@@ -182,13 +184,14 @@ Uses the **ip2asn-combined.tsv.gz** database from [iptoasn.com](https://iptoasn.
 - Script: `scripts/update_asn_db.sh`
 - Output: `data/asn_db.bin`
 
-### 2. RIPE Organization Database
+### 2. Multi-RIR Organization Database
 
-Uses RIPE NCC database dumps to map ASN → Organization name.
+Uses data from all 5 Regional Internet Registries (RIRs) to map ASN → Organization details.
 
-- Sources: `ripe.db.aut-num` (ASN→org reference) + `ripe.db.organisation` (org details)
-- Script: `scripts/update_ripe_db.sh`
-- Output: `data/ripe_db.bin`
+- **Sources**: RIPE, APNIC, LACNIC, AFRINIC (RPSL format), ARIN (delegated stats fallback)
+- **Data**: org_id, org_name, country, RIR, org_type, abuse_contact, last_updated
+- **Script**: `scripts/update_org_db.sh`
+- **Output**: `data/orgs_db.bin`
 
 ### Usage
 
@@ -199,8 +202,8 @@ cargo build --release
 # Update ASN database (IP ranges)
 ./scripts/update_asn_db.sh
 
-# Update RIPE organization database (company names)
-./scripts/update_ripe_db.sh
+# Update multi-RIR organization database
+./scripts/update_org_db.sh
 ```
 
 Then:
@@ -215,7 +218,7 @@ Or explicitly specify database paths:
 
 ```bash
 CLOAKPROBE_ASN_DB_PATH=/opt/cloakprobe/data/asn_db.bin \
-CLOAKPROBE_RIPE_DB_PATH=/opt/cloakprobe/data/ripe_db.bin \
+CLOAKPROBE_ORG_DB_PATH=/opt/cloakprobe/data/orgs_db.bin \
 CLOAKPROBE_PRIVACY_MODE=strict \
   ./target/release/cloakprobe
 ```
@@ -226,8 +229,8 @@ CLOAKPROBE_PRIVACY_MODE=strict \
 # Update ASN database daily at 3:00 AM
 0 3 * * * /opt/cloakprobe/scripts/update_asn_db.sh >> /var/log/cloakprobe-asn-update.log 2>&1
 
-# Update RIPE organization database daily at 4:00 AM
-0 4 * * * /opt/cloakprobe/scripts/update_ripe_db.sh >> /var/log/cloakprobe-ripe-update.log 2>&1
+# Update multi-RIR organization database weekly on Sunday at 4:00 AM
+0 4 * * 0 /opt/cloakprobe/scripts/update_org_db.sh >> /var/log/cloakprobe-org-update.log 2>&1
 ```
 
 ---
@@ -316,14 +319,21 @@ CloakProbe includes a comprehensive Privacy Policy page (`/privacy`) that is GDP
 
 The privacy policy is accessible from the main page footer and can be viewed at `/privacy`.
 
-### Reverse DNS Lookup
+### Reverse DNS and ISP Hint Lookup
 
-CloakProbe includes an optional client-side reverse DNS lookup feature:
+CloakProbe includes optional client-side DNS lookup features:
+
+**Reverse DNS (PTR) Lookup:**
 - **User-initiated only**: The lookup only happens when the user explicitly clicks the "Lookup Reverse DNS" button
 - **Client-side**: Uses Cloudflare DNS over HTTPS (DoH) directly from the browser
 - **No server-side processing**: No data is sent to the CloakProbe server
 - **Privacy-focused**: Cloudflare DoH is privacy-focused and does not log queries
-- **No automatic requests**: The page does not send any external requests automatically, neither client-side nor server-side
+- **No automatic requests**: The page does not send any external requests automatically
+
+**Authoritative NS (ISP Hint) Lookup:**
+- **Runs in parallel**: When PTR lookup is triggered, NS lookup runs simultaneously
+- **ISP detection**: Extracts ISP/provider domain from nameserver hostnames (e.g., `ns1.telekom.hu` → `telekom.hu`)
+- **Useful for identification**: Helps identify the actual ISP even when reverse DNS hostname doesn't contain the provider name
 
 ---
 
@@ -355,18 +365,8 @@ Please report security vulnerabilities privately. See [SECURITY.md](SECURITY.md)
   - The lookup happens entirely in the browser when the user clicks the "Lookup Reverse DNS" button
   - No server-side reverse DNS lookup is implemented (the API response does not include reverse DNS)
 
-## Building Releases
-
-To build release binaries for multiple architectures:
-
-```bash
-./scripts/build-release.sh [VERSION]
-```
-
-This creates tarballs in the `release/` directory for each architecture.
-
 ## Acknowledgments
 
 - Uses [iptoasn.com](https://iptoasn.com/) data (Public Domain / PDDL)
-- Uses [RIPE NCC](https://www.ripe.net/) database dumps for organization information
+- Uses data from all 5 Regional Internet Registries (RIRs): [RIPE NCC](https://www.ripe.net/), [APNIC](https://www.apnic.net/), [LACNIC](https://www.lacnic.net/), [AFRINIC](https://www.afrinic.net/), [ARIN](https://www.arin.net/)
 - Built with [Rust](https://www.rust-lang.org/) and [Axum](https://github.com/tokio-rs/axum)

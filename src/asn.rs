@@ -13,7 +13,18 @@ pub struct AsnInfo {
     pub prefix: String,
     pub rir: String,
     pub country: Option<String>,
+    pub org: Option<OrgDetails>,
+}
+
+#[derive(Debug, Clone)]
+pub struct OrgDetails {
+    pub org_id: Option<String>,
     pub org_name: Option<String>,
+    pub country: Option<String>,
+    pub rir: Option<String>,
+    pub org_type: Option<String>,
+    pub abuse_contact: Option<String>,
+    pub last_updated: Option<String>,
 }
 
 pub trait AsnDatabase: Send + Sync {
@@ -42,27 +53,26 @@ pub trait AsnDatabase: Send + Sync {
 ///
 /// The DB is built from the ip2asn-combined.tsv dataset using the asn_builder binary.
 ///
-/// RIPE DB v2 format with string interning:
-/// - org_names: Vec<String> - unique organization names
-/// - asn_to_org: HashMap<u32, u16> - ASN -> index into org_names
-struct RipeOrgDb {
-    org_names: Vec<String>,
+/// Organization DB format(s):
+/// - Legacy RIPE DB v1/v2 (magic "RIPE")
+/// - Merged RIR DB v1 (magic "ORGS")
+struct OrgDb {
+    orgs: Vec<OrgDetails>,
     asn_to_org: HashMap<u32, u16>,
 }
 
-impl RipeOrgDb {
-    fn lookup(&self, asn: u32) -> Option<&str> {
+impl OrgDb {
+    fn lookup(&self, asn: u32) -> Option<&OrgDetails> {
         self.asn_to_org
             .get(&asn)
-            .and_then(|&idx| self.org_names.get(idx as usize))
-            .map(|s| s.as_str())
+            .and_then(|&idx| self.orgs.get(idx as usize))
     }
 }
 
 pub struct FileAsnDb {
     v4: Vec<V4Entry>,
     v6: Vec<V6Entry>,
-    ripe_db: Option<RipeOrgDb>,
+    org_db: Option<OrgDb>,
 }
 
 #[derive(Clone, Debug)]
@@ -94,60 +104,60 @@ pub fn load_asn_db(cfg: &AppConfig) -> Result<FileAsnDb, String> {
 
     let mut db = FileAsnDb::from_bytes(&asn_data)?;
 
-    // Load RIPE organization database if available
-    if let Some(ref ripe_db_path) = cfg.ripe_db_path {
-        if Path::new(ripe_db_path).exists() {
-            tracing::info!("Loading RIPE org database from: {}", ripe_db_path);
-            let ripe_data = fs::read(ripe_db_path).map_err(|e| {
-                format!("Failed to read RIPE database from {}: {}", ripe_db_path, e)
-            })?;
+    // Load organization database (merged RIR or legacy RIPE) if available
+    if let Some(ref org_db_path) = cfg.org_db_path {
+        if Path::new(org_db_path).exists() {
+            tracing::info!("Loading organization database from: {}", org_db_path);
+            let org_data = fs::read(org_db_path)
+                .map_err(|e| format!("Failed to read org database from {}: {}", org_db_path, e))?;
 
-            match load_ripe_db(&ripe_data) {
-                Ok(ripe_db) => {
+            match load_org_db(&org_data) {
+                Ok(org_db) => {
                     tracing::info!(
-                        "RIPE org database loaded: {} orgs, {} ASN mappings",
-                        ripe_db.org_names.len(),
-                        ripe_db.asn_to_org.len()
+                        "Org database loaded: {} orgs, {} ASN mappings",
+                        org_db.orgs.len(),
+                        org_db.asn_to_org.len()
                     );
-                    db.ripe_db = Some(ripe_db);
+                    db.org_db = Some(org_db);
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to load RIPE database: {}", e);
+                    tracing::warn!("Failed to load org database: {}", e);
                 }
             }
         } else {
-            tracing::warn!("RIPE org database file not found: {}", ripe_db_path);
+            tracing::warn!("Org database file not found: {}", org_db_path);
         }
     }
 
     Ok(db)
 }
 
-fn load_ripe_db(data: &[u8]) -> Result<RipeOrgDb, String> {
+fn load_org_db(data: &[u8]) -> Result<OrgDb, String> {
     if data.len() < 16 {
-        return Err("RIPE DB: file too small".into());
+        return Err("Org DB: file too small".into());
     }
 
     let magic = &data[0..4];
-    if magic != b"RIPE" {
-        return Err("RIPE DB: invalid magic".into());
-    }
-
-    let version = u32::from_le_bytes(data[4..8].try_into().unwrap());
-
-    match version {
-        1 => load_ripe_db_v1(data),
-        2 => load_ripe_db_v2(data),
-        _ => Err(format!("RIPE DB: unsupported version {}", version)),
+    match magic {
+        b"RIPE" => {
+            let version = u32::from_le_bytes(data[4..8].try_into().unwrap());
+            match version {
+                1 => load_ripe_db_v1(data),
+                2 => load_ripe_db_v2(data),
+                _ => Err(format!("RIPE DB: unsupported version {}", version)),
+            }
+        }
+        b"ORGS" => load_orgs_db_v1(data),
+        _ => Err("Org DB: invalid magic".into()),
     }
 }
 
 /// Load legacy v1 format (for backwards compatibility)
-fn load_ripe_db_v1(data: &[u8]) -> Result<RipeOrgDb, String> {
+fn load_ripe_db_v1(data: &[u8]) -> Result<OrgDb, String> {
     let count = u32::from_le_bytes(data[8..12].try_into().unwrap()) as usize;
     let mut offset = 12;
 
-    let mut org_names = Vec::new();
+    let mut orgs: Vec<OrgDetails> = Vec::new();
     let mut asn_to_org = HashMap::new();
     let mut org_name_to_idx: HashMap<String, u16> = HashMap::new();
 
@@ -214,8 +224,16 @@ fn load_ripe_db_v1(data: &[u8]) -> Result<RipeOrgDb, String> {
             let idx = if let Some(&existing_idx) = org_name_to_idx.get(&name) {
                 existing_idx
             } else {
-                let new_idx = org_names.len() as u16;
-                org_names.push(name.clone());
+                let new_idx = orgs.len() as u16;
+                orgs.push(OrgDetails {
+                    org_id: None,
+                    org_name: Some(name.clone()),
+                    country: None,
+                    rir: Some("RIPE".to_string()),
+                    org_type: None,
+                    abuse_contact: None,
+                    last_updated: None,
+                });
                 org_name_to_idx.insert(name, new_idx);
                 new_idx
             };
@@ -223,14 +241,11 @@ fn load_ripe_db_v1(data: &[u8]) -> Result<RipeOrgDb, String> {
         }
     }
 
-    Ok(RipeOrgDb {
-        org_names,
-        asn_to_org,
-    })
+    Ok(OrgDb { orgs, asn_to_org })
 }
 
 /// Load v2 format with string interning
-fn load_ripe_db_v2(data: &[u8]) -> Result<RipeOrgDb, String> {
+fn load_ripe_db_v2(data: &[u8]) -> Result<OrgDb, String> {
     if data.len() < 16 {
         return Err("RIPE DB v2: file too small".into());
     }
@@ -241,7 +256,7 @@ fn load_ripe_db_v2(data: &[u8]) -> Result<RipeOrgDb, String> {
     let mut offset = 16;
 
     // Read org names
-    let mut org_names = Vec::with_capacity(org_count);
+    let mut orgs: Vec<OrgDetails> = Vec::with_capacity(org_count);
     for _ in 0..org_count {
         if offset + 2 > data.len() {
             return Err("RIPE DB v2: file truncated reading org name length".into());
@@ -254,7 +269,15 @@ fn load_ripe_db_v2(data: &[u8]) -> Result<RipeOrgDb, String> {
         }
         let name = String::from_utf8_lossy(&data[offset..offset + len]).to_string();
         offset += len;
-        org_names.push(name);
+        orgs.push(OrgDetails {
+            org_id: None,
+            org_name: Some(name),
+            country: None,
+            rir: Some("RIPE".to_string()),
+            org_type: None,
+            abuse_contact: None,
+            last_updated: None,
+        });
     }
 
     // Read ASN mappings
@@ -269,10 +292,84 @@ fn load_ripe_db_v2(data: &[u8]) -> Result<RipeOrgDb, String> {
         asn_to_org.insert(asn, idx);
     }
 
-    Ok(RipeOrgDb {
-        org_names,
-        asn_to_org,
-    })
+    Ok(OrgDb { orgs, asn_to_org })
+}
+
+/// Load merged ORGS DB v1 format (magic "ORGS")
+/// Header (16 bytes):
+/// - magic: "ORGS"
+/// - version: u32 = 1
+/// - org_count: u32
+/// - asn_count: u32
+/// - Org entries (org_count):
+///   - For each org: 7 strings, each prefixed with u16 len (org_id, org_name, country, rir, org_type, abuse_contact, last_updated)
+/// - ASN mappings (asn_count):
+///   - For each: asn:u32, org_idx:u16 (sorted by ASN)
+fn load_orgs_db_v1(data: &[u8]) -> Result<OrgDb, String> {
+    if data.len() < 16 {
+        return Err("ORGS DB v1: file too small".into());
+    }
+
+    let version = u32::from_le_bytes(data[4..8].try_into().unwrap());
+    if version != 1 {
+        return Err(format!("ORGS DB: unsupported version {}", version));
+    }
+
+    let org_count = u32::from_le_bytes(data[8..12].try_into().unwrap()) as usize;
+    let asn_count = u32::from_le_bytes(data[12..16].try_into().unwrap()) as usize;
+
+    let mut offset = 16;
+    let mut orgs: Vec<OrgDetails> = Vec::with_capacity(org_count);
+
+    for _ in 0..org_count {
+        let read_str = |data: &[u8], offset: &mut usize| -> Result<Option<String>, String> {
+            if *offset + 2 > data.len() {
+                return Err("ORGS DB: truncated reading length".into());
+            }
+            let len = u16::from_le_bytes(data[*offset..*offset + 2].try_into().unwrap()) as usize;
+            *offset += 2;
+            if len == 0 {
+                return Ok(None);
+            }
+            if *offset + len > data.len() {
+                return Err("ORGS DB: truncated reading string".into());
+            }
+            let s = String::from_utf8_lossy(&data[*offset..*offset + len]).to_string();
+            *offset += len;
+            Ok(Some(s))
+        };
+
+        let org_id = read_str(data, &mut offset)?;
+        let org_name = read_str(data, &mut offset)?;
+        let country = read_str(data, &mut offset)?;
+        let rir = read_str(data, &mut offset)?;
+        let org_type = read_str(data, &mut offset)?;
+        let abuse_contact = read_str(data, &mut offset)?;
+        let last_updated = read_str(data, &mut offset)?;
+
+        orgs.push(OrgDetails {
+            org_id,
+            org_name,
+            country,
+            rir,
+            org_type,
+            abuse_contact,
+            last_updated,
+        });
+    }
+
+    let mut asn_to_org = HashMap::with_capacity(asn_count);
+    for _ in 0..asn_count {
+        if offset + 6 > data.len() {
+            return Err("ORGS DB: truncated reading ASN mapping".into());
+        }
+        let asn = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
+        let idx = u16::from_le_bytes(data[offset + 4..offset + 6].try_into().unwrap());
+        offset += 6;
+        asn_to_org.insert(asn, idx);
+    }
+
+    Ok(OrgDb { orgs, asn_to_org })
 }
 
 impl FileAsnDb {
@@ -386,7 +483,7 @@ impl FileAsnDb {
         Ok(Self {
             v4,
             v6,
-            ripe_db: None,
+            org_db: None,
         })
     }
 
@@ -480,11 +577,7 @@ impl FileAsnDb {
             prefix_len_from_range_v4(start, end)
         );
 
-        let org_name = self
-            .ripe_db
-            .as_ref()
-            .and_then(|db| db.lookup(asn))
-            .map(|s| s.to_string());
+        let org = self.org_db.as_ref().and_then(|db| db.lookup(asn)).cloned();
 
         AsnInfo {
             asn,
@@ -492,7 +585,7 @@ impl FileAsnDb {
             prefix,
             rir: "ip2asn".into(),
             country: country_opt(country),
-            org_name,
+            org,
         }
     }
 
@@ -510,11 +603,7 @@ impl FileAsnDb {
             prefix_len_from_range_v6(start, end)
         );
 
-        let org_name = self
-            .ripe_db
-            .as_ref()
-            .and_then(|db| db.lookup(asn))
-            .map(|s| s.to_string());
+        let org = self.org_db.as_ref().and_then(|db| db.lookup(asn)).cloned();
 
         AsnInfo {
             asn,
@@ -522,7 +611,7 @@ impl FileAsnDb {
             prefix,
             rir: "ip2asn".into(),
             country: country_opt(country),
-            org_name,
+            org,
         }
     }
 }

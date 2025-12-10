@@ -10,7 +10,7 @@
 # Environment variables can override any value (for container deployments):
 #   CLOAKPROBE_BIND_ADDRESS, CLOAKPROBE_PORT, CLOAKPROBE_MODE,
 #   CLOAKPROBE_REGION, CLOAKPROBE_PRIVACY_MODE,
-#   CLOAKPROBE_ASN_DB_PATH, CLOAKPROBE_RIPE_DB_PATH
+#   CLOAKPROBE_ASN_DB_PATH, CLOAKPROBE_ORG_DB_PATH
 
 # =============================================================================
 # Server Configuration
@@ -66,8 +66,10 @@ mode = "strict"
 # Required for ASN, AS name, prefix, and RIR information
 asn_db_path = "data/asn_db.bin"
 
-# Path to the RIPE organization database (optional)
-# This database provides additional organization details from RIPE NCC
-# Optional: enhances ASN information with organization names
-ripe_db_path = "data/ripe_db.bin"
+# Path to the multi-RIR organization database (optional)
+# This database provides organization details from all 5 Regional Internet Registries:
+# RIPE NCC, APNIC, LACNIC, AFRINIC, and ARIN
+# Includes: org_id, org_name, country, type, abuse_contact, last_updated
+# Optional: enhances ASN information with organization details
+org_db_path = "data/orgs_db.bin"
 

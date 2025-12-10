@@ -25,9 +25,9 @@ This script will:
    sudo /opt/cloakprobe/scripts/update_asn_db.sh
    ```
 
-2. **Download RIPE Organization Database** (ASN → Company name):
+2. **Download Multi-RIR Organization Database** (ASN → Company details from all 5 RIRs):
    ```bash
-   sudo /opt/cloakprobe/scripts/update_ripe_db.sh
+   sudo /opt/cloakprobe/scripts/update_org_db.sh
    ```
 
 3. **Start the Service**:
@@ -75,14 +75,15 @@ sudo chown -R cloakprobe:cloakprobe /opt/cloakprobe
 ```bash
 # Copy update scripts
 sudo cp scripts/update_asn_db.sh /opt/cloakprobe/scripts/
-sudo cp scripts/update_ripe_db.sh /opt/cloakprobe/scripts/
+sudo cp scripts/update_org_db.sh /opt/cloakprobe/scripts/
+sudo cp scripts/download_rir_orgs.sh /opt/cloakprobe/scripts/
 sudo chmod +x /opt/cloakprobe/scripts/*.sh
 
 # Download ASN database (IP ranges)
 sudo /opt/cloakprobe/scripts/update_asn_db.sh
 
-# Download RIPE organization database (company names)
-sudo /opt/cloakprobe/scripts/update_ripe_db.sh
+# Download multi-RIR organization database (org details from all 5 RIRs)
+sudo /opt/cloakprobe/scripts/update_org_db.sh
 ```
 
 ### Step 5: Install Systemd Service
@@ -96,20 +97,39 @@ sudo systemctl start cloakprobe
 
 ## Configuration
 
-Edit the systemd service file to customize settings:
+CloakProbe uses a TOML configuration file. Edit the config file:
 
 ```bash
-sudo nano /etc/systemd/system/cloakprobe.service
+sudo nano /etc/cloakprobe/cloakprobe.toml
 ```
 
-Key environment variables:
-- `CLOAKPROBE_PRIVACY_MODE`: `strict` or `balanced`
-- `CLOAKPROBE_ASN_DB_PATH`: Path to ASN database. If not set, automatically searches in `data/asn_db.bin` and `./data/asn_db.bin`
-- `CLOAKPROBE_RIPE_DB_PATH`: Path to RIPE organization database. If not set, automatically searches in `data/ripe_db.bin` and `./data/ripe_db.bin`
-- `CLOAKPROBE_REGION`: Optional region identifier
-- `PORT`: Port to bind to (default: `8080`)
+Example configuration:
 
-**Note**: Starting with version 0.1.1, CloakProbe automatically searches for database files in the `data/` directory if environment variables are not set. This makes configuration easier - you can simply place database files in the `data/` directory relative to where you run the binary.
+```toml
+[server]
+bind_address = "127.0.0.1"
+port = 8080
+mode = "cloudflare"    # or "nginx"
+region = "eu-central"  # optional
+
+[privacy]
+mode = "strict"        # or "balanced"
+
+[database]
+asn_db_path = "/opt/cloakprobe/data/asn_db.bin"
+org_db_path = "/opt/cloakprobe/data/orgs_db.bin"
+```
+
+Environment variables can override config file values:
+- `CLOAKPROBE_BIND_ADDRESS`: Bind address
+- `CLOAKPROBE_PORT`: Port number
+- `CLOAKPROBE_MODE`: Proxy mode (`cloudflare` or `nginx`)
+- `CLOAKPROBE_PRIVACY_MODE`: Privacy mode (`strict` or `balanced`)
+- `CLOAKPROBE_ASN_DB_PATH`: Path to ASN database
+- `CLOAKPROBE_ORG_DB_PATH`: Path to multi-RIR organization database
+- `CLOAKPROBE_REGION`: Optional region identifier
+
+**Note**: CloakProbe automatically searches for database files in the `data/` directory if paths are not specified.
 
 After editing, reload and restart:
 
@@ -162,9 +182,10 @@ sudo journalctl -u cloakprobe -n 50
 
 Common issues:
 - ASN database missing: Run `update_asn_db.sh`
-- RIPE database missing: Run `update_ripe_db.sh` (optional, for organization names)
+- Organization database missing: Run `update_org_db.sh` (optional, for organization details)
+- Config file missing: Check `/etc/cloakprobe/cloakprobe.toml` exists
 - Permission issues: Check file ownership (`cloakprobe:cloakprobe`)
-- Port already in use: Change `PORT` in service file
+- Port already in use: Change `port` in config file
 
 ### Binary not found
 

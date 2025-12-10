@@ -70,15 +70,16 @@ impl Default for PrivacyConfig {
 pub struct DatabaseConfig {
     /// Path to ASN database
     pub asn_db_path: String,
-    /// Path to RIPE organization database (optional)
-    pub ripe_db_path: Option<String>,
+    /// Path to multi-RIR organization database (optional)
+    #[serde(alias = "ripe_db_path")]
+    pub org_db_path: Option<String>,
 }
 
 impl Default for DatabaseConfig {
     fn default() -> Self {
         Self {
             asn_db_path: "data/asn_db.bin".to_string(),
-            ripe_db_path: Some("data/ripe_db.bin".to_string()),
+            org_db_path: Some("data/orgs_db.bin".to_string()),
         }
     }
 }
@@ -101,7 +102,7 @@ pub struct AppConfig {
     pub region: Option<String>,
     pub privacy_mode: PrivacyMode,
     pub asn_db_path: String,
-    pub ripe_db_path: Option<String>,
+    pub org_db_path: Option<String>,
 }
 
 impl AppConfig {
@@ -117,7 +118,7 @@ impl AppConfig {
     /// - CLOAKPROBE_MODE (cloudflare/nginx)
     /// - CLOAKPROBE_REGION
     /// - CLOAKPROBE_PRIVACY_MODE
-    /// - CLOAKPROBE_ASN_DB_PATH / CLOAKPROBE_RIPE_DB_PATH
+    /// - CLOAKPROBE_ASN_DB_PATH / CLOAKPROBE_ORG_DB_PATH
     pub fn load(config_path: Option<&str>) -> Result<Self, String> {
         // Find and load TOML config
         let toml_config = Self::load_toml_config(config_path)?;
@@ -158,14 +159,16 @@ impl AppConfig {
         let asn_db_path =
             env::var("CLOAKPROBE_ASN_DB_PATH").unwrap_or(toml_config.database.asn_db_path);
 
-        let ripe_db_path = env::var("CLOAKPROBE_RIPE_DB_PATH")
+        // Support both new CLOAKPROBE_ORG_DB_PATH and legacy CLOAKPROBE_RIPE_DB_PATH
+        let org_db_path = env::var("CLOAKPROBE_ORG_DB_PATH")
             .ok()
-            .or(toml_config.database.ripe_db_path);
+            .or_else(|| env::var("CLOAKPROBE_RIPE_DB_PATH").ok())
+            .or(toml_config.database.org_db_path);
 
         // Validate database paths exist
         let asn_db_path = Self::find_database_path(&asn_db_path, "asn_db.bin")?;
-        let ripe_db_path =
-            ripe_db_path.and_then(|p| Self::find_database_path(&p, "ripe_db.bin").ok());
+        let org_db_path =
+            org_db_path.and_then(|p| Self::find_database_path(&p, "orgs_db.bin").ok());
 
         Ok(Self {
             bind_address,
@@ -174,7 +177,7 @@ impl AppConfig {
             region,
             privacy_mode,
             asn_db_path,
-            ripe_db_path,
+            org_db_path,
         })
     }
 

@@ -1,8 +1,8 @@
 [package]
 name = "cloakprobe"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
-authors = ["CloakProbe Contributors"]
+authors = ["Péter Veres"]
 license = "AGPL-3.0"
 description = "Privacy-first, security-focused IP information service for Cloudflare"
 repository = "https://github.com/drmckay/cloakprobe"
@@ -25,3 +25,7 @@ thiserror = "2.0"
 chrono = { version = "0.4", features = ["clock", "serde"] }
 memmap2 = "0.9"
 tera = "1.19"
+tempfile = "3.12"
+flate2 = "1.0"
+quick-xml = "0.37"
+clap = { version = "4", features = ["derive"] }

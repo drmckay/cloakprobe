@@ -7,11 +7,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2025-01-XX
+
 ### Added
-- Planned multi-RIR organization database integration (RIPE, ARIN, APNIC, LACNIC, AFRINIC)
-- Normalized org schema (ASN → org_id, org_name, country, RIR, org_type, abuse_contact, last_updated)
-- Org-builder plan with RIR-specific parsers, provenance, and conflict handling
-- UI/API enrichment plan: show org name + RIR + country, org type tag, abuse-contact indicator, data freshness badge
+- Server response time displayed in Server Information card
+  - Shows processing time in milliseconds (e.g., `0.42 ms`)
+  - Available in HTML UI, JSON API (`server.response_time_ms`), and plain text output
+- HTTP cache prevention headers on all dynamic endpoints
+  - `Cache-Control: no-store, no-cache, must-revalidate, max-age=0`
+  - `Pragma: no-cache` and `Expires: 0` for HTTP/1.0 compatibility
+  - Applied to HTML, JSON, and plain text responses
+- Client-side authoritative NS lookup for ISP hint detection
+  - Queries NS records for reverse DNS zone via Cloudflare DoH
+  - Extracts ISP/provider domain from nameserver hostnames (e.g., `ns1.telekom.hu` → `telekom.hu`)
+  - Runs in parallel with PTR lookup for faster results
+  - Displayed below reverse DNS result as "Authoritative NS (ISP Hint)"
+- Multi-RIR organization database integration with Rust parsers
+  - `org_builder_rpsl`: Unified RPSL parser for RIPE, APNIC, LACNIC, AFRINIC bulk data
+  - `org_builder_arin`: ARIN XML parser for asns.xml, orgs.xml, pocs.xml
+  - Support for gzipped input files via `flate2` crate
+  - Streaming XML parsing via `quick-xml` for memory efficiency
+- Normalized org schema: ASN → org_id, org_name, country, RIR, org_type, abuse_contact, last_updated
+- Extended organization info in API/UI: org ID, RIR source, country, org type, abuse contact, last updated
+- Updated database update scripts for all 5 RIRs
+  - `scripts/download_rir_orgs.sh`: Downloads and parses all RIR bulk data
+  - `scripts/update_org_db.sh`: Orchestrates full database rebuild
+  - Automatic fallback to delegated stats for RIRs with unavailable bulk data
+- Comprehensive integration tests for all 5 RIR parsers (`tests/rir_integration.rs`)
+- ip2asn fallback for organization database coverage
+  - `org_builder --fallback <ip2asn.tsv>` option adds missing ASNs from ip2asn data
+  - Provides country code and AS name for ASNs without RIR organization records
+  - Improves coverage from ~94% to ~99.99% of all announced ASNs
+  - Fallback entries marked with `rir: "ip2asn"` and `org_type: "fallback"`
+- `db_coverage` tool to analyze ASN coverage between asn_db and orgs_db
+- Mode-aware connection headers for nginx deployment
+  - Nginx mode uses `X-TLS-Version`, `X-TLS-Cipher`, `X-HTTP-Protocol` headers
+  - Cloudflare mode uses `X-CF-TLS-Version`, `X-CF-TLS-Cipher`, `X-CF-HTTP-Protocol` headers
+  - Nginx configurations in documentation updated with connection header proxy settings
+- Extended nginx header support
+  - `X-Request-ID`: Unique request identifier (nginx `$request_id`)
+  - `X-Remote-Port`: Client source port (nginx `$remote_port`)
+  - `X-Connection-ID`: Connection serial number (nginx `$connection`)
+  - Displayed in Connection Details card when in nginx mode
+- Optional GeoIP support for nginx mode
+  - `X-GeoIP-Country`, `X-GeoIP-City`, `X-GeoIP-Region`, `X-GeoIP-Latitude/Longitude`, `X-GeoIP-Postal-Code`, `X-GeoIP-Org`
+  - Requires nginx GeoIP module (`ngx_http_geoip_module` or `ngx_http_geoip2_module`)
+  - Displayed in dedicated "Geo Location (GeoIP)" card when data is available
+  - Documentation includes GeoIP setup guide for nginx
+- JSON API includes new `nginx` object with geo and proxy headers when in nginx mode
+- `ConnectionInfo` now includes `tls_cipher`, `request_id`, `remote_port`, `connection_id` fields
+- Abuse contact handle resolution to email addresses
+  - `org_builder_rpsl` now parses role/person objects to resolve abuse-c handles (e.g., "RFOR-RIPE") to actual email addresses
+  - `--role` CLI argument accepts role/person file path for handle resolution
+  - Combined database files (AFRINIC, LACNIC) automatically parse roles from the same file
+  - `download_rir_orgs.sh` downloads role files for RIPE and APNIC
+  - Abuse contact field now displays email addresses instead of RIR-specific handles
+
+### Changed
+- Network Information card simplified
+  - RIR field now displays Org RIR value (removed duplicate "Org RIR" row)
+  - Removed "Org Country" field (duplicated "Country Code")
+  - Plain text output also updated to remove duplicate fields
+- Cloudflare Headers card is now hidden in nginx mode (only shown when `mode = "cloudflare"`)
+- Proxy Headers shown in a separate card when in nginx mode
+- CF-Ray and Datacenter fields hidden in Connection Details card when not in cloudflare mode
+- IP Address Details card now shows version-appropriate information:
+  - IPv4: Dotted Decimal, Hexadecimal, Binary, Numeric (u32), /24 Subnet, Subnet Size
+  - IPv6: Standard Notation, Full Expanded, Binary, /64 Network, Network Size
+  - Removed redundant/meaningless fields (decimal format for IPv6 was showing hex)
+- Renamed `ripe_db_path` config option to `org_db_path` (backward compatible via alias)
+- Environment variable `CLOAKPROBE_RIPE_DB_PATH` renamed to `CLOAKPROBE_ORG_DB_PATH` (legacy supported)
+
+### Fixed
+- CSV parser now properly handles RFC 4180 quoted fields (org names with commas like `"Company, Inc."`)
+- RPSL parser handles Latin-1 encoded characters in RIR data via lossy UTF-8 conversion
+
+### Removed
+- `org_builder_ripe.rs` (replaced by unified `org_builder_rpsl.rs`)
+- `scripts/build-release.sh` (releases now handled by GitHub Actions)
+- `scripts/update_ripe_db.sh` (replaced by multi-RIR `update_org_db.sh`)
 
 ## [0.1.2] - 2025-12-09
 
@@ -94,7 +168,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configurable port via environment variable
 - Privacy modes (strict, balanced)
 
-[Unreleased]: https://github.com/drmckay/cloakprobe/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/drmckay/cloakprobe/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/drmckay/cloakprobe/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/drmckay/cloakprobe/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/drmckay/cloakprobe/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/drmckay/cloakprobe/releases/tag/v0.1.0

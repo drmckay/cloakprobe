@@ -54,14 +54,18 @@ jobs:
         run: |
           cargo build --release --target ${{ matrix.target }}
           cargo build --release --target ${{ matrix.target }} --bin asn_builder
-          cargo build --release --target ${{ matrix.target }} --bin ripe_builder
+          cargo build --release --target ${{ matrix.target }} --bin org_builder
+          cargo build --release --target ${{ matrix.target }} --bin org_builder_rpsl
+          cargo build --release --target ${{ matrix.target }} --bin org_builder_arin
 
       - name: Build (cross)
         if: matrix.cross
         run: |
           cross build --release --target ${{ matrix.target }}
           cross build --release --target ${{ matrix.target }} --bin asn_builder
-          cross build --release --target ${{ matrix.target }} --bin ripe_builder
+          cross build --release --target ${{ matrix.target }} --bin org_builder
+          cross build --release --target ${{ matrix.target }} --bin org_builder_rpsl
+          cross build --release --target ${{ matrix.target }} --bin org_builder_arin
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4
@@ -70,7 +74,9 @@ jobs:
           path: |
             target/${{ matrix.target }}/release/cloakprobe
             target/${{ matrix.target }}/release/asn_builder
-            target/${{ matrix.target }}/release/ripe_builder
+            target/${{ matrix.target }}/release/org_builder
+            target/${{ matrix.target }}/release/org_builder_rpsl
+            target/${{ matrix.target }}/release/org_builder_arin
 
   build-databases:
     name: Build Databases
@@ -97,7 +103,6 @@ jobs:
       - name: Build database builders
         run: |
           cargo build --release --bin asn_builder
-          cargo build --release --bin ripe_builder
 
       - name: Download ip2asn database
         run: |
@@ -119,37 +124,8 @@ jobs:
           done
           gunzip -c data/ip2asn-combined.tsv.gz > data/ip2asn-combined.tsv
 
-      - name: Download RIPE database
-        run: |
-          download_with_retry() {
-            local url="$1"
-            local output="$2"
-            for i in 1 2 3 4 5; do
-              echo "Attempt $i: Downloading $(basename $output)..."
-              if curl -sSfL --connect-timeout 30 --max-time 300 "$url" -o "$output"; then
-                echo "Download successful"
-                return 0
-              fi
-              if [ $i -eq 5 ]; then
-                echo "Failed to download $url after 5 attempts"
-                return 1
-              fi
-              echo "Download failed, retrying in $((2**i)) seconds..."
-              sleep $((2**i))
-            done
-          }
-          
-          download_with_retry "ftp://ftp.ripe.net/ripe/dbase/split/ripe.db.aut-num.gz" data/ripe.db.aut-num.gz
-          download_with_retry "ftp://ftp.ripe.net/ripe/dbase/split/ripe.db.organisation.gz" data/ripe.db.organisation.gz
-          
-          gunzip -c data/ripe.db.aut-num.gz > data/ripe.db.aut-num.txt
-          gunzip -c data/ripe.db.organisation.gz > data/ripe.db.organisation.txt
-
       - name: Build ASN database
         run: ./target/release/asn_builder data/ip2asn-combined.tsv data/asn_db.bin
-
-      - name: Build RIPE database
-        run: ./target/release/ripe_builder data/ripe.db.aut-num.txt data/ripe.db.organisation.txt data/ripe_db.bin
 
       - name: Upload databases
         uses: actions/upload-artifact@v4
@@ -157,7 +133,6 @@ jobs:
           name: databases
           path: |
             data/asn_db.bin
-            data/ripe_db.bin
 
   package:
     name: Package ${{ matrix.target }}
@@ -196,18 +171,22 @@ jobs:
           # Copy binaries
           cp binaries/cloakprobe "${PACKAGE_DIR}/"
           cp binaries/asn_builder "${PACKAGE_DIR}/"
-          cp binaries/ripe_builder "${PACKAGE_DIR}/"
+          cp binaries/org_builder "${PACKAGE_DIR}/"
+          cp binaries/org_builder_rpsl "${PACKAGE_DIR}/"
+          cp binaries/org_builder_arin "${PACKAGE_DIR}/"
           chmod +x "${PACKAGE_DIR}/cloakprobe"
           chmod +x "${PACKAGE_DIR}/asn_builder"
-          chmod +x "${PACKAGE_DIR}/ripe_builder"
+          chmod +x "${PACKAGE_DIR}/org_builder"
+          chmod +x "${PACKAGE_DIR}/org_builder_rpsl"
+          chmod +x "${PACKAGE_DIR}/org_builder_arin"
           
-          # Copy databases
+          # Copy databases (ASN only, org DB is built after installation)
           cp databases/asn_db.bin "${PACKAGE_DIR}/data/"
-          cp databases/ripe_db.bin "${PACKAGE_DIR}/data/"
           
           # Copy scripts
           cp scripts/update_asn_db.sh "${PACKAGE_DIR}/scripts/"
-          cp scripts/update_ripe_db.sh "${PACKAGE_DIR}/scripts/"
+          cp scripts/update_org_db.sh "${PACKAGE_DIR}/scripts/"
+          cp scripts/download_rir_orgs.sh "${PACKAGE_DIR}/scripts/"
           chmod +x "${PACKAGE_DIR}/scripts/"*.sh
           
           # Copy systemd services
@@ -291,14 +270,15 @@ jobs:
           Each package includes:
           - `cloakprobe` - Main binary
           - `asn_builder` - ASN database builder
-          - `ripe_builder` - RIPE organization database builder
+          - `org_builder`, `org_builder_rpsl`, `org_builder_arin` - Multi-RIR organization database builders
           - `cloakprobe.example.toml` - Example configuration file
           - `data/asn_db.bin` - Pre-built ASN database (from iptoasn.com)
-          - `data/ripe_db.bin` - Pre-built RIPE organization database
           - `templates/` - HTML templates (index.html.tera, privacy.html.tera)
-          - `scripts/` - Database update scripts
+          - `scripts/` - Database update scripts (including multi-RIR org update)
           - `systemd/` - Systemd service files (single and multi-instance)
           - `docs/` - Deployment documentation (nginx setup guide)
+          
+          > **Note**: Multi-RIR organization database is not pre-built. Run `update_org_db.sh` after installation.
 
           ### Installation
 

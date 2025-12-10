@@ -184,6 +184,16 @@ server {
         proxy_set_header X-Real-IP         $remote_addr;
         proxy_set_header X-Forwarded-For   $remote_addr;
 
+        # Connection details (TLS/HTTP protocol info)
+        proxy_set_header X-TLS-Version     $ssl_protocol;
+        proxy_set_header X-TLS-Cipher      $ssl_cipher;
+        proxy_set_header X-HTTP-Protocol   $server_protocol;
+
+        # Request identification
+        proxy_set_header X-Request-ID      $request_id;
+        proxy_set_header X-Remote-Port     $remote_port;
+        proxy_set_header X-Connection-ID   $connection;
+
         # SECURITY: Clear any spoofed Cloudflare headers
         proxy_set_header CF-Connecting-IP  "";
         proxy_set_header CF-IPCountry      "";
@@ -251,6 +261,16 @@ server {
         # SECURITY: Always use $remote_addr
         proxy_set_header X-Real-IP         $remote_addr;
         proxy_set_header X-Forwarded-For   $remote_addr;
+
+        # Connection details (TLS/HTTP protocol info)
+        proxy_set_header X-TLS-Version     $ssl_protocol;
+        proxy_set_header X-TLS-Cipher      $ssl_cipher;
+        proxy_set_header X-HTTP-Protocol   $server_protocol;
+
+        # Request identification
+        proxy_set_header X-Request-ID      $request_id;
+        proxy_set_header X-Remote-Port     $remote_port;
+        proxy_set_header X-Connection-ID   $connection;
 
         # Clear spoofed headers
         proxy_set_header CF-Connecting-IP  "";
@@ -483,6 +503,88 @@ sudo systemctl start cloakprobe@ipv6
 
 # Check status
 sudo systemctl status cloakprobe@*
+```
+
+---
+
+## Optional: GeoIP Configuration
+
+If you have the nginx GeoIP module (`ngx_http_geoip_module`) installed, you can pass geolocation data to CloakProbe. This provides similar functionality to Cloudflare's geo headers.
+
+### Prerequisites
+
+1. Install GeoIP module:
+   ```bash
+   # Debian/Ubuntu
+   sudo apt install libnginx-mod-http-geoip geoip-database
+   
+   # CentOS/RHEL
+   sudo yum install nginx-mod-http-geoip GeoIP GeoIP-data
+   ```
+
+2. Download MaxMind GeoLite2 database (requires free account):
+   ```bash
+   # Legacy format (for ngx_http_geoip_module)
+   sudo mkdir -p /usr/share/GeoIP
+   sudo wget -O /usr/share/GeoIP/GeoLiteCity.dat \
+     "https://your-download-url/GeoLiteCity.dat"
+   ```
+
+### Nginx GeoIP Configuration
+
+Add to `nginx.conf` (http block):
+
+```nginx
+http {
+    # GeoIP databases
+    geoip_country /usr/share/GeoIP/GeoIP.dat;
+    geoip_city    /usr/share/GeoIP/GeoLiteCity.dat;
+    
+    # ... rest of config
+}
+```
+
+Add to your server location block:
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:8081;
+    
+    # ... existing headers ...
+    
+    # GeoIP headers (optional, requires ngx_http_geoip_module)
+    proxy_set_header X-GeoIP-Country     $geoip_country_code;
+    proxy_set_header X-GeoIP-City        $geoip_city;
+    proxy_set_header X-GeoIP-Region      $geoip_region;
+    proxy_set_header X-GeoIP-Latitude    $geoip_latitude;
+    proxy_set_header X-GeoIP-Longitude   $geoip_longitude;
+    proxy_set_header X-GeoIP-Postal-Code $geoip_postal_code;
+    proxy_set_header X-GeoIP-Org         $geoip_org;
+}
+```
+
+### Alternative: GeoIP2 Module
+
+For better accuracy, use the newer `ngx_http_geoip2_module`:
+
+```nginx
+# In http block
+geoip2 /usr/share/GeoIP/GeoLite2-City.mmdb {
+    $geoip2_country_code country iso_code;
+    $geoip2_city_name city names en;
+    $geoip2_region_name subdivisions 0 names en;
+    $geoip2_latitude location latitude;
+    $geoip2_longitude location longitude;
+    $geoip2_postal_code postal code;
+}
+
+# In location block
+proxy_set_header X-GeoIP-Country     $geoip2_country_code;
+proxy_set_header X-GeoIP-City        $geoip2_city_name;
+proxy_set_header X-GeoIP-Region      $geoip2_region_name;
+proxy_set_header X-GeoIP-Latitude    $geoip2_latitude;
+proxy_set_header X-GeoIP-Longitude   $geoip2_longitude;
+proxy_set_header X-GeoIP-Postal-Code $geoip2_postal_code;
 ```
 
 ---
