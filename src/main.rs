@@ -2,9 +2,12 @@ mod asn;
 mod cf;
 mod config;
 mod error;
+mod formatters;
 mod handlers;
+mod headers;
 mod model;
 mod security_headers;
+mod utils;
 
 use asn::load_asn_db;
 use axum::{routing::get, Router};
@@ -12,6 +15,7 @@ use config::AppConfig;
 use handlers::{health_handler, html_handler, info_handler, plain_handler, privacy_handler};
 use security_headers::security_headers_layer;
 use std::sync::Arc;
+use tera::Tera;
 use tower_http::trace::TraceLayer;
 use tracing::Level;
 
@@ -103,6 +107,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let asn_db = load_asn_db(&cfg).map_err(|e| format!("Failed to load ASN database: {e}"))?;
     tracing::info!("ASN database loaded successfully");
 
+    // Initialize Tera templates once
+    let tera = Arc::new(
+        Tera::new("templates/**/*.tera")
+            .map_err(|e| format!("Failed to initialize templates: {e}"))?,
+    );
+
     // Build bind address from config
     let addr: SocketAddr = format!("{}:{}", cfg.bind_address, cfg.port)
         .parse()
@@ -111,6 +121,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let shared_state = handlers::AppState {
         config: cfg,
         asn_db: Arc::new(asn_db),
+        tera: tera.clone(),
     };
 
     // Build security headers layers

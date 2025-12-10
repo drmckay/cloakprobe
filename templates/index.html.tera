@@ -373,14 +373,6 @@
           <span class="info-label">Numeric (u32)</span>
           <span class="info-value"><code>{{ ip_numeric }}</code></span>
         </div>
-        <div class="info-row">
-          <span class="info-label">/24 Subnet</span>
-          <span class="info-value"><code>{{ ip_subnet }}</code></span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Subnet Size</span>
-          <span class="info-value"><code>{{ ip_subnet_size }}</code></span>
-        </div>
         {% else %}
         <div class="info-row">
           <span class="info-label">Standard Notation</span>
@@ -393,14 +385,6 @@
         <div class="info-row">
           <span class="info-label">Binary Format</span>
           <span class="info-value"><code style="font-size: 0.6em; word-break: break-all;">{{ ip_binary }}</code></span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">/64 Network</span>
-          <span class="info-value"><code style="font-size: 0.85em;">{{ ip_subnet }}</code></span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Network Size</span>
-          <span class="info-value"><code>{{ ip_subnet_size }}</code></span>
         </div>
         {% endif %}
         <div class="info-row">

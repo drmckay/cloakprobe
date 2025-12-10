@@ -21,7 +21,7 @@ Privacy-first, security-focused IP information service designed to run behind Cl
 - 🔒 **Privacy-first**: No tracking, no ads, no analytics
 - 🛡️ **Security-focused**: Comprehensive security headers, input validation
 - 🌐 **IPv4 & IPv6**: Full support for both IP versions
-- 📊 **Detailed Information**: IP details, ASN lookup, network information, organization name
+- 📊 **Detailed Information**: IP details (multiple formats), ASN lookup, network information, organization details from all 5 RIRs
 - 🎨 **Modern UI**: Beautiful dark theme, responsive design, one-click IP copy
 - ⚡ **Fast**: Built with Rust for performance
 - 🔧 **Easy Setup**: Simple configuration, Docker-ready
@@ -357,6 +357,7 @@ Please report security vulnerabilities privately. See [SECURITY.md](SECURITY.md)
 
 ## Development / Extension
 
+- **Code Structure**: Modular architecture with separate handler modules (`handlers/`), header extraction (`headers/`), utilities (`utils/`), and formatters (`formatters/`)
 - **ASN lookup**: `src/asn.rs` uses a binary prefix-range database from ip2asn.
 - **Tor / VPN detection**:
   - The `NetworkInfo` struct contains `tor_exit` and `vpn_or_hosting` flags, these default to `false`.
@@ -364,6 +365,11 @@ Please report security vulnerabilities privately. See [SECURITY.md](SECURITY.md)
   - Client-side reverse DNS lookup is available via the HTML UI using Cloudflare DNS over HTTPS (DoH)
   - The lookup happens entirely in the browser when the user clicks the "Lookup Reverse DNS" button
   - No server-side reverse DNS lookup is implemented (the API response does not include reverse DNS)
+- **Testing**:
+  - Comprehensive test suite with 70 tests covering handlers, headers, utils, and formatters
+  - All handlers have dedicated test modules
+  - Run tests with `cargo test`
+  - Ensure code passes `cargo fmt` and `cargo clippy` without warnings
 
 ## Acknowledgments
 

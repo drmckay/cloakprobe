@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Comprehensive handler tests for all endpoint handlers
+  - Health handler tests (1 test)
+  - Info handler tests (4 tests: basic, ASN data, nginx mode, invalid IP)
+  - Plain handler tests (5 tests: basic, ASN data, nginx mode, invalid IP, client hints)
+  - HTML handler tests (4 tests: basic, ASN data, nginx mode, missing IP)
+  - Privacy handler tests (1 test)
+  - Total: 15 new handler tests, bringing total test count to 70
+
+### Changed
+- IP Address Details card UI improvements
+  - IPv4 hexadecimal format changed from dotted notation (`C0.A8.01.01`) to 0x prefix format (`0xC0A80101`) without dots
+  - Removed redundant `/24 Subnet` and `Subnet Size` rows from IPv4 details
+  - Removed redundant `/64 Network` and `Network Size` rows from IPv6 details
+- Codebase refactoring for improved maintainability and performance
+  - **Modular handler structure**: Split `handlers/mod.rs` into separate handler modules
+    - `handlers/info.rs` - JSON API handler
+    - `handlers/html.rs` - HTML UI handler
+    - `handlers/plain.rs` - Plain text handler
+    - `handlers/privacy.rs` - Privacy policy handler
+    - `handlers/health.rs` - Health check handler
+    - `handlers/mod.rs` - Module exports and `AppState` definition
+  - Extracted Cloudflare header processing to dedicated `headers/cloudflare.rs` module
+  - Moved utility functions to focused modules (`utils/sanitize.rs`, `utils/dnt.rs`, `utils/ip.rs`)
+  - Cached Tera template engine in `AppState` to avoid re-initialization on each request
+  - Optimized sanitization functions to accept `Option<&str>` and reduce string cloning
+  - Improved code organization: connection, nginx, client, and cloudflare header extraction now in separate modules
+  - **Formatter helpers now actively used**: HTML, JSON, and plain text handlers now use formatter helper functions
+    - Reduced code duplication: ~400 lines of repetitive context building code replaced with reusable helpers
+    - Header item building logic extracted to `formatters/html.rs` (geo location, network, connection, security, proxy items)
+    - Plain text output now uses `formatters/plain.rs` helpers for consistent formatting
+  - **String cloning optimization**: Reduced unnecessary cloning by using references (`&str`) instead of owned strings
+    - Cloudflare header extraction now uses references (`geo_ref`, `network_ref`, etc.) instead of cloning values
+    - Reduced memory allocations and improved performance, especially for high-traffic scenarios
+  - **Template context building optimization**: Pre-sized context HashMap and batch operations using formatter helpers
+    - Context building now uses helper functions that batch insertions efficiently
+    - Reduced HashMap reallocations during context construction
+
 ## [0.1.3] - 2025-01-10
 
 ### Added
@@ -71,8 +109,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cloudflare Headers card is now hidden in nginx mode (only shown when `mode = "cloudflare"`)
 - Proxy Headers shown in a separate card when in nginx mode
 - CF-Ray and Datacenter fields hidden in Connection Details card when not in cloudflare mode
-- IP Address Details card now shows version-appropriate information:
-  - IPv4: Dotted Decimal, Hexadecimal, Binary, Numeric (u32), /24 Subnet, Subnet Size
+  - IP Address Details card now shows version-appropriate information:
+  - IPv4: Dotted Decimal, Hexadecimal (0x format), Binary Format, Numeric (u32), Address Type
+  - IPv6: Standard Notation, Full Expanded, Binary Format, Address Type
   - IPv6: Standard Notation, Full Expanded, Binary, /64 Network, Network Size
   - Removed redundant/meaningless fields (decimal format for IPv6 was showing hex)
 - Renamed `ripe_db_path` config option to `org_db_path` (backward compatible via alias)

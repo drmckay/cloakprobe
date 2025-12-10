@@ -153,7 +153,7 @@ pub struct ServerInfo {
     pub response_time_ms: Option<f64>,
 }
 
-#[derive(Serialize, Default)]
+#[derive(Serialize, Default, PartialEq, Clone, Debug)]
 pub struct CloudflareGeoHeaders {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub country: Option<String>,
@@ -175,7 +175,7 @@ pub struct CloudflareGeoHeaders {
     pub timezone: Option<String>,
 }
 
-#[derive(Serialize, Default)]
+#[derive(Serialize, Default, PartialEq, Clone, Debug)]
 pub struct CloudflareNetworkHeaders {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub asn: Option<String>,
@@ -185,7 +185,7 @@ pub struct CloudflareNetworkHeaders {
     pub colo: Option<String>,
 }
 
-#[derive(Serialize, Default)]
+#[derive(Serialize, Default, PartialEq, Clone, Debug)]
 pub struct CloudflareConnectionHeaders {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cf_visitor: Option<String>,
@@ -203,7 +203,7 @@ pub struct CloudflareConnectionHeaders {
     pub cf_cache_status: Option<String>,
 }
 
-#[derive(Serialize, Default)]
+#[derive(Serialize, Default, PartialEq, Clone, Debug)]
 pub struct CloudflareSecurityHeaders {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub trust_score: Option<String>,
@@ -213,7 +213,7 @@ pub struct CloudflareSecurityHeaders {
     pub verified_bot: Option<String>,
 }
 
-#[derive(Serialize, Default)]
+#[derive(Serialize, Default, PartialEq, Clone, Debug)]
 pub struct CloudflareProxyHeaders {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub x_forwarded_for: Option<String>,
@@ -222,7 +222,7 @@ pub struct CloudflareProxyHeaders {
 }
 
 /// Nginx GeoIP headers (optional, requires nginx geoip module)
-#[derive(Serialize, Default)]
+#[derive(Serialize, Default, PartialEq, Clone)]
 pub struct NginxGeoHeaders {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub country: Option<String>,
@@ -241,7 +241,7 @@ pub struct NginxGeoHeaders {
 }
 
 /// Nginx-specific headers container for JSON output
-#[derive(Serialize, Default)]
+#[derive(Serialize, Default, PartialEq, Clone)]
 pub struct NginxHeaders {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub geo: Option<NginxGeoHeaders>,
@@ -249,7 +249,7 @@ pub struct NginxHeaders {
     pub proxy: Option<CloudflareProxyHeaders>,
 }
 
-#[derive(Serialize, Default)]
+#[derive(Serialize, Default, PartialEq, Clone)]
 pub struct CloudflareHeaders {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub geo: Option<CloudflareGeoHeaders>,
