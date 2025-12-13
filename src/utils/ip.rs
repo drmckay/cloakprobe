@@ -7,8 +7,6 @@ pub struct IpDetails {
     pub expanded: String,
     pub binary: String,
     pub numeric: String,
-    pub subnet: String,
-    pub subnet_size: String,
     pub ip_type: String,
 }
 
@@ -35,7 +33,7 @@ fn is_multicast_v6(ip: &Ipv6Addr) -> bool {
     ip.segments()[0] & 0xff00 == 0xff00
 }
 
-/// Compute IP details (representation, type, subnet hints)
+/// Compute IP details (representation, type)
 pub fn get_ip_details(ip: &IpAddr) -> IpDetails {
     match ip {
         IpAddr::V4(ipv4) => {
@@ -61,8 +59,6 @@ pub fn get_ip_details(ip: &IpAddr) -> IpDetails {
                 octets[0], octets[1], octets[2], octets[3]
             );
             let numeric = u32::from_be_bytes(octets).to_string();
-            let subnet = format!("{}.{}.{}.0/24", octets[0], octets[1], octets[2]);
-            let subnet_size = "256 hosts".to_string();
 
             IpDetails {
                 primary: ipv4.to_string(),
@@ -70,8 +66,6 @@ pub fn get_ip_details(ip: &IpAddr) -> IpDetails {
                 expanded: ipv4.to_string(),
                 binary,
                 numeric,
-                subnet,
-                subnet_size,
                 ip_type: ip_type.to_string(),
             }
         }
@@ -112,20 +106,12 @@ pub fn get_ip_details(ip: &IpAddr) -> IpDetails {
                 segments[7]
             );
 
-            let subnet = format!(
-                "{:04x}:{:04x}:{:04x}:{:04x}::/64",
-                segments[0], segments[1], segments[2], segments[3]
-            );
-            let subnet_size = "2^64 addresses".to_string();
-
             IpDetails {
                 primary: ipv6.to_string(),
                 hex: format!("{:032x}", u128::from_be_bytes(ipv6.octets())),
                 expanded,
                 binary,
                 numeric: u128::from(*ipv6).to_string(),
-                subnet,
-                subnet_size,
                 ip_type: ip_type.to_string(),
             }
         }
@@ -143,8 +129,6 @@ mod tests {
         let details = get_ip_details(&ip);
         assert_eq!(details.primary, "8.8.8.8");
         assert_eq!(details.ip_type, "Public");
-        assert!(details.subnet.contains("/24"));
-        assert_eq!(details.subnet_size, "256 hosts");
     }
 
     #[test]
@@ -182,8 +166,6 @@ mod tests {
         let ip = IpAddr::from_str("2001:4860:4860::8888").unwrap();
         let details = get_ip_details(&ip);
         assert_eq!(details.ip_type, "Global");
-        assert!(details.subnet.contains("/64"));
-        assert_eq!(details.subnet_size, "2^64 addresses");
     }
 
     #[test]

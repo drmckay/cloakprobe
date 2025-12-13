@@ -37,8 +37,6 @@ pub async fn html_handler(State(state): State<AppState>, headers: HeaderMap) -> 
             expanded: "—".into(),
             binary: "—".into(),
             numeric: "—".into(),
-            subnet: "—".into(),
-            subnet_size: "—".into(),
             ip_type: "—".into(),
         });
 

@@ -22,8 +22,6 @@ pub mod context_builder {
         context.insert("ip_expanded", &ip_details.expanded);
         context.insert("ip_binary", &ip_details.binary);
         context.insert("ip_numeric", &ip_details.numeric);
-        context.insert("ip_subnet", &ip_details.subnet);
-        context.insert("ip_subnet_size", &ip_details.subnet_size);
     }
 
     /// Adds network information to the template context.
