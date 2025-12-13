@@ -203,8 +203,8 @@ impl AppConfig {
         }
 
         // No config file found, use defaults
-        if config_path.is_some() {
-            return Err(format!("Config file not found: {}", config_path.unwrap()));
+        if let Some(config_path) = config_path {
+            return Err(format!("Config file not found: {}", config_path));
         }
 
         tracing::info!("No config file found, using defaults");
