@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 # CloakProbe Installation Script
@@ -136,7 +136,8 @@ check_os() {
 }
 
 detect_arch() {
-    local arch=$(uname -m)
+    local arch
+    arch=$(uname -m)
     case "$arch" in
         x86_64)
             echo "x86_64"
@@ -206,7 +207,7 @@ install_binary() {
     fi
     
     # Debug: list contents
-    log_info "Package contents: $(ls -1 "${package_dir}" | head -5 | tr '\n' ' ')..."
+    log_info "Package contents: $(find "${package_dir}" -maxdepth 1 -type f -printf '%f\n' 2>/dev/null | head -5 | tr '\n' ' ')..."
     
     # Copy binary
     if [[ -f "${package_dir}/${BINARY_NAME}" ]]; then
@@ -380,7 +381,8 @@ setup_asn_database() {
     # Check if database was included in release
     if [[ -f "${INSTALL_DIR}/data/asn_db.bin" ]]; then
         log_info "ASN database found in release package"
-        local db_size=$(du -h "${INSTALL_DIR}/data/asn_db.bin" | cut -f1)
+        local db_size
+        db_size=$(du -h "${INSTALL_DIR}/data/asn_db.bin" | cut -f1)
         log_info "Database size: ${db_size}"
     else
         log_warn "ASN database not found in release package"
@@ -427,7 +429,8 @@ setup_cron() {
     local cron_job="${cron_schedule} ${cron_command}"
     
     # Check if cron job already exists
-    local existing_cron=$(crontab -u "${SERVICE_USER}" -l 2>/dev/null | grep -F "${INSTALL_DIR}/scripts/update_asn_db.sh" || true)
+    local existing_cron
+    existing_cron=$(crontab -u "${SERVICE_USER}" -l 2>/dev/null | grep -F "${INSTALL_DIR}/scripts/update_asn_db.sh" || true)
     
     if [[ -n "${existing_cron}" ]]; then
         log_info "Cron job already exists for ASN database updates"
@@ -438,7 +441,8 @@ setup_cron() {
     log_info "Adding cron job for daily ASN database updates (3:00 AM)..."
     
     # Get existing crontab or create empty one
-    local current_cron=$(crontab -u "${SERVICE_USER}" -l 2>/dev/null || echo "")
+    local current_cron
+    current_cron=$(crontab -u "${SERVICE_USER}" -l 2>/dev/null || echo "")
     
     # Add new cron job
     if [[ -z "${current_cron}" ]]; then

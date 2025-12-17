@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Download RIR bulk data and produce a merged CSV using Rust parsers:
-#   asn,org_id,org_name,country,rir,org_type,abuse_contact,last_updated
+#   asn,as_name,org_id,org_name,country,rir,org_type,abuse_contact,last_updated
 #
 # Supported RIRs:
 #   - RIPE    (RPSL format: aut-num + organisation)
@@ -44,7 +44,7 @@ build_parser "org_builder_rpsl"
 build_parser "org_builder_arin"
 
 # Clear output CSV (write header later after all data collected)
-> "${MERGED_CSV}"
+: > "${MERGED_CSV}"
 
 #############################
 # RIPE NCC
@@ -191,14 +191,15 @@ if [ -f "${ARIN_ASNS}" ] && [ -f "${ARIN_ORGS}" ]; then
     echo "[*] Found ARIN bulk data files"
     echo "[*] Parsing ARIN data..."
     
-    ARIN_ARGS="--asns ${ARIN_ASNS} --orgs ${ARIN_ORGS}"
     if [ -f "${ARIN_POCS}" ]; then
-        ARIN_ARGS="${ARIN_ARGS} --pocs ${ARIN_POCS}"
+        "${ARIN_BUILDER}" --asns "${ARIN_ASNS}" --orgs "${ARIN_ORGS}" --pocs "${ARIN_POCS}" >> "${MERGED_CSV}" || {
+            echo "[WARN] ARIN parsing failed, continuing..."
+        }
+    else
+        "${ARIN_BUILDER}" --asns "${ARIN_ASNS}" --orgs "${ARIN_ORGS}" >> "${MERGED_CSV}" || {
+            echo "[WARN] ARIN parsing failed, continuing..."
+        }
     fi
-    
-    "${ARIN_BUILDER}" ${ARIN_ARGS} >> "${MERGED_CSV}" || {
-        echo "[WARN] ARIN parsing failed, continuing..."
-    }
 else
     echo "[*] ARIN bulk data not found."
     echo "[*] To include ARIN data, download from:"
@@ -217,10 +218,10 @@ else
     if [ -f "${ARIN_DELEG}" ] && [ -s "${ARIN_DELEG}" ]; then
         echo "[*] Parsing ARIN delegated stats..."
         # Parse delegated stats format: registry|cc|type|start|value|date|status|...
-        grep "|asn|" "${ARIN_DELEG}" | while IFS='|' read -r registry cc rtype start value date status rest; do
+        grep "|asn|" "${ARIN_DELEG}" | while IFS='|' read -r registry cc rtype start _value date _status rest; do
             # Only include ASN records
             if [ "$rtype" = "asn" ] && [ -n "$start" ]; then
-                echo "${start},,,$cc,ARIN,,,${date}"
+                echo "${start},,,,$cc,ARIN,,,${date}"
             fi
         done >> "${MERGED_CSV}"
     fi
@@ -275,7 +276,7 @@ for deleg_file in "${DELEG_DIR}"/delegated-*.txt; do
     
     rir=$(basename "$deleg_file" | sed 's/delegated-\(.*\)\.txt/\1/' | tr '[:lower:]' '[:upper:]')
     
-    while IFS='|' read -r registry cc rtype start value date status rest; do
+    while IFS='|' read -r registry cc rtype start _value date _status rest; do
         # Skip non-ASN records and comments
         if [ "$rtype" != "asn" ] || [ -z "$start" ] || [[ "$registry" == \#* ]]; then
             continue
@@ -287,7 +288,7 @@ for deleg_file in "${DELEG_DIR}"/delegated-*.txt; do
         fi
         
         # Add to merged CSV
-        echo "${start},,,$cc,${rir},,,${date}" >> "${MERGED_CSV}"
+        echo "${start},,,,$cc,${rir},,,${date}" >> "${MERGED_CSV}"
         echo "${start}" >> "${EXISTING_ASN_FILE}"
         ADDED_COUNT=$((ADDED_COUNT + 1))
     done < "$deleg_file"
