@@ -3,8 +3,8 @@ use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 
-/// Expected input CSV (no headers), comma-separated, 8 fields:
-/// asn,org_id,org_name,country,rir,org_type,abuse_contact,last_updated
+/// Expected input CSV (no headers), comma-separated, 9 fields:
+/// asn,as_name,org_id,org_name,country,rir,org_type,abuse_contact,last_updated
 /// Empty fields are allowed (treated as None).
 /// Supports RFC 4180 CSV format with quoted fields containing commas.
 ///
@@ -13,11 +13,11 @@ use std::io::{BufRead, BufReader, Write};
 ///
 /// Output format (binary):
 /// magic "ORGS"
-/// version u32 = 1
+/// version u32 = 2
 /// org_count u32
 /// asn_count u32
 /// org entries (org_count):
-///   7 strings (org_id, org_name, country, rir, org_type, abuse_contact, last_updated), each len:u16 + utf8 bytes (len=0 => None)
+///   8 strings (as_name, org_id, org_name, country, rir, org_type, abuse_contact, last_updated), each len:u16 + utf8 bytes (len=0 => None)
 /// asn mappings (asn_count):
 ///   asn:u32, org_idx:u16 (sorted by ASN)
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -57,7 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
         eprintln!();
         eprintln!("Input CSV columns (no header):");
-        eprintln!("asn,org_id,org_name,country,rir,org_type,abuse_contact,last_updated");
+        eprintln!("asn,as_name,org_id,org_name,country,rir,org_type,abuse_contact,last_updated");
         eprintln!();
         eprintln!("Optional --fallback: ip2asn TSV file to fill missing ASNs with country/AS name");
         eprintln!("  Format: start_ip, end_ip, asn, country, as_name (tab-separated)");
@@ -122,6 +122,7 @@ fn parse_csv_line(line: &str) -> Vec<String> {
 
 #[derive(Debug, Clone)]
 struct OrgRecord {
+    as_name: Option<String>,
     org_id: Option<String>,
     org_name: Option<String>,
     country: Option<String>,
@@ -160,9 +161,9 @@ fn run_with_args(
 
         // Use proper CSV parsing for quoted fields
         let parts = parse_csv_line(&line);
-        if parts.len() != 8 {
+        if parts.len() != 9 {
             eprintln!(
-                "[WARN] Line {}: expected 8 columns, got {} -> {}",
+                "[WARN] Line {}: expected 9 columns, got {} -> {}",
                 lineno + 1,
                 parts.len(),
                 line
@@ -187,13 +188,14 @@ fn run_with_args(
         };
 
         let record = OrgRecord {
-            org_id: to_opt(&parts[1]),
-            org_name: to_opt(&parts[2]),
-            country: to_opt(&parts[3]),
-            rir: to_opt(&parts[4]),
-            org_type: to_opt(&parts[5]),
-            abuse_contact: to_opt(&parts[6]),
-            last_updated: to_opt(&parts[7]),
+            as_name: to_opt(&parts[1]),
+            org_id: to_opt(&parts[2]),
+            org_name: to_opt(&parts[3]),
+            country: to_opt(&parts[4]),
+            rir: to_opt(&parts[5]),
+            org_type: to_opt(&parts[6]),
+            abuse_contact: to_opt(&parts[7]),
+            last_updated: to_opt(&parts[8]),
         };
 
         let key = (
@@ -244,7 +246,7 @@ fn run_with_args(
     // Build output
     let mut out = Vec::new();
     out.extend_from_slice(b"ORGS");
-    out.extend_from_slice(&1u32.to_le_bytes()); // version
+    out.extend_from_slice(&2u32.to_le_bytes()); // version 2: includes as_name
     out.extend_from_slice(&(orgs.len() as u32).to_le_bytes());
     out.extend_from_slice(&(asn_to_org.len() as u32).to_le_bytes());
 
@@ -260,6 +262,7 @@ fn run_with_args(
     };
 
     for org in &orgs {
+        write_str(&mut out, &org.as_name);
         write_str(&mut out, &org.org_id);
         write_str(&mut out, &org.org_name);
         write_str(&mut out, &org.country);
@@ -277,7 +280,7 @@ fn run_with_args(
     let mut f = File::create(output)?;
     f.write_all(&out)?;
 
-    eprintln!("[*] Written {} bytes to {} (ORGS v1)", out.len(), output);
+    eprintln!("[*] Written {} bytes to {} (ORGS v2)", out.len(), output);
 
     Ok(())
 }
@@ -334,6 +337,11 @@ fn process_ip2asn_fallback(
     for (asn, (country, as_name)) in fallback_asns {
         // Create fallback org record
         let record = OrgRecord {
+            as_name: if as_name.is_empty() || as_name == "Not routed" {
+                None
+            } else {
+                Some(as_name.clone())
+            },
             org_id: None,
             org_name: if as_name.is_empty() || as_name == "Not routed" {
                 None
@@ -381,56 +389,59 @@ mod tests {
 
     #[test]
     fn test_parse_csv_simple() {
-        let line = "15169,GOGL-ARIN,Google LLC,US,ARIN,hosting,abuse@google.com,2024-12-09";
+        let line = "15169,GOOGLE,GOGL-ARIN,Google LLC,US,ARIN,hosting,abuse@google.com,2024-12-09";
         let parts = parse_csv_line(line);
-        assert_eq!(parts.len(), 8);
+        assert_eq!(parts.len(), 9);
         assert_eq!(parts[0], "15169");
-        assert_eq!(parts[1], "GOGL-ARIN");
-        assert_eq!(parts[2], "Google LLC");
-        assert_eq!(parts[3], "US");
-        assert_eq!(parts[4], "ARIN");
+        assert_eq!(parts[1], "GOOGLE");
+        assert_eq!(parts[2], "GOGL-ARIN");
+        assert_eq!(parts[3], "Google LLC");
+        assert_eq!(parts[4], "US");
+        assert_eq!(parts[5], "ARIN");
     }
 
     #[test]
     fn test_parse_csv_quoted_with_comma() {
-        let line = r#"12345,ORG-TEST,"Company, Inc.",US,ARIN,isp,abuse@example.com,2024-12-09"#;
+        let line =
+            r#"12345,TEST-AS,ORG-TEST,"Company, Inc.",US,ARIN,isp,abuse@example.com,2024-12-09"#;
         let parts = parse_csv_line(line);
-        assert_eq!(parts.len(), 8);
+        assert_eq!(parts.len(), 9);
         assert_eq!(parts[0], "12345");
-        assert_eq!(parts[1], "ORG-TEST");
-        assert_eq!(parts[2], "Company, Inc.");
-        assert_eq!(parts[3], "US");
-        assert_eq!(parts[4], "ARIN");
+        assert_eq!(parts[1], "TEST-AS");
+        assert_eq!(parts[2], "ORG-TEST");
+        assert_eq!(parts[3], "Company, Inc.");
+        assert_eq!(parts[4], "US");
+        assert_eq!(parts[5], "ARIN");
     }
 
     #[test]
     fn test_parse_csv_quoted_with_escaped_quotes() {
-        let line = r#"67890,ORG-QUOTE,"He said ""Hello""",GB,RIPE,isp,,2024-12-09"#;
+        let line = r#"67890,QUOTE-AS,ORG-QUOTE,"He said ""Hello""",GB,RIPE,isp,,2024-12-09"#;
         let parts = parse_csv_line(line);
-        assert_eq!(parts.len(), 8);
+        assert_eq!(parts.len(), 9);
         assert_eq!(parts[0], "67890");
-        assert_eq!(parts[2], r#"He said "Hello""#);
-        assert_eq!(parts[3], "GB");
+        assert_eq!(parts[3], r#"He said "Hello""#);
+        assert_eq!(parts[4], "GB");
     }
 
     #[test]
     fn test_parse_csv_empty_fields() {
-        let line = "12345,,,,ARIN,,,2024-12-09";
+        let line = "12345,,,,,ARIN,,,2024-12-09";
         let parts = parse_csv_line(line);
-        assert_eq!(parts.len(), 8);
+        assert_eq!(parts.len(), 9);
         assert_eq!(parts[0], "12345");
         assert_eq!(parts[1], "");
         assert_eq!(parts[2], "");
-        assert_eq!(parts[4], "ARIN");
-        assert_eq!(parts[7], "2024-12-09");
+        assert_eq!(parts[5], "ARIN");
+        assert_eq!(parts[8], "2024-12-09");
     }
 
     #[test]
     fn test_parse_csv_multiple_commas_in_quoted() {
-        let line = r#"99999,ORG-X,"One, Two, Three, Inc.",CA,APNIC,hosting,,2024-01-01"#;
+        let line = r#"99999,X-AS,ORG-X,"One, Two, Three, Inc.",CA,APNIC,hosting,,2024-01-01"#;
         let parts = parse_csv_line(line);
-        assert_eq!(parts.len(), 8);
-        assert_eq!(parts[2], "One, Two, Three, Inc.");
+        assert_eq!(parts.len(), 9);
+        assert_eq!(parts[3], "One, Two, Three, Inc.");
     }
 
     #[test]
@@ -440,8 +451,8 @@ mod tests {
         let out_path = dir.path().join("orgs_db.bin");
 
         let csv = "\
-15169,GOGL-ARIN,Google LLC,US,ARIN,hosting,abuse@google.com,2024-12-09
-13335,CLDR-ARIN,Cloudflare,US,ARIN,cdn,abuse@cloudflare.com,2024-12-09
+15169,GOOGLE,GOGL-ARIN,Google LLC,US,ARIN,hosting,abuse@google.com,2024-12-09
+13335,CLOUDFLARENET,CLDR-ARIN,Cloudflare,US,ARIN,cdn,abuse@cloudflare.com,2024-12-09
 ";
         std::fs::write(&csv_path, csv).unwrap();
 
@@ -457,9 +468,9 @@ mod tests {
         let csv_path = dir.path().join("orgs_quoted.csv");
         let out_path = dir.path().join("orgs_db.bin");
 
-        let csv = r#"15169,GOGL-ARIN,Google LLC,US,ARIN,hosting,abuse@google.com,2024-12-09
-12345,ORG-TEST,"Company, Inc.",US,ARIN,isp,abuse@test.com,2024-12-09
-67890,ORG-QUOTE,"He said ""Hi""",GB,RIPE,,,2024-12-09
+        let csv = r#"15169,GOOGLE,GOGL-ARIN,Google LLC,US,ARIN,hosting,abuse@google.com,2024-12-09
+12345,TEST-AS,ORG-TEST,"Company, Inc.",US,ARIN,isp,abuse@test.com,2024-12-09
+67890,QUOTE-AS,ORG-QUOTE,"He said ""Hi""",GB,RIPE,,,2024-12-09
 "#;
         std::fs::write(&csv_path, csv).unwrap();
 
@@ -483,7 +494,7 @@ mod tests {
         let out_path = dir.path().join("orgs_db.bin");
 
         // RIR data - only has AS15169
-        let csv = "15169,GOGL-ARIN,Google LLC,US,ARIN,hosting,abuse@google.com,2024-12-09\n";
+        let csv = "15169,GOOGLE,GOGL-ARIN,Google LLC,US,ARIN,hosting,abuse@google.com,2024-12-09\n";
         std::fs::write(&csv_path, csv).unwrap();
 
         // ip2asn data - has AS15169 (should be skipped) and AS13335 (should be added)

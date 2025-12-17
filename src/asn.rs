@@ -18,6 +18,7 @@ pub struct AsnInfo {
 
 #[derive(Debug, Clone)]
 pub struct OrgDetails {
+    pub as_name: Option<String>,
     pub org_id: Option<String>,
     pub org_name: Option<String>,
     pub country: Option<String>,
@@ -147,7 +148,14 @@ fn load_org_db(data: &[u8]) -> Result<OrgDb, String> {
                 _ => Err(format!("RIPE DB: unsupported version {}", version)),
             }
         }
-        b"ORGS" => load_orgs_db_v1(data),
+        b"ORGS" => {
+            let version = u32::from_le_bytes(data[4..8].try_into().unwrap());
+            match version {
+                1 => load_orgs_db_v1(data),
+                2 => load_orgs_db_v2(data),
+                _ => Err(format!("ORGS DB: unsupported version {}", version)),
+            }
+        }
         _ => Err("Org DB: invalid magic".into()),
     }
 }
@@ -226,6 +234,7 @@ fn load_ripe_db_v1(data: &[u8]) -> Result<OrgDb, String> {
             } else {
                 let new_idx = orgs.len() as u16;
                 orgs.push(OrgDetails {
+                    as_name: None,
                     org_id: None,
                     org_name: Some(name.clone()),
                     country: None,
@@ -270,6 +279,7 @@ fn load_ripe_db_v2(data: &[u8]) -> Result<OrgDb, String> {
         let name = String::from_utf8_lossy(&data[offset..offset + len]).to_string();
         offset += len;
         orgs.push(OrgDetails {
+            as_name: None,
             org_id: None,
             org_name: Some(name),
             country: None,
@@ -348,6 +358,7 @@ fn load_orgs_db_v1(data: &[u8]) -> Result<OrgDb, String> {
         let last_updated = read_str(data, &mut offset)?;
 
         orgs.push(OrgDetails {
+            as_name: None, // v1 doesn't have as_name
             org_id,
             org_name,
             country,
@@ -362,6 +373,72 @@ fn load_orgs_db_v1(data: &[u8]) -> Result<OrgDb, String> {
     for _ in 0..asn_count {
         if offset + 6 > data.len() {
             return Err("ORGS DB: truncated reading ASN mapping".into());
+        }
+        let asn = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
+        let idx = u16::from_le_bytes(data[offset + 4..offset + 6].try_into().unwrap());
+        offset += 6;
+        asn_to_org.insert(asn, idx);
+    }
+
+    Ok(OrgDb { orgs, asn_to_org })
+}
+
+/// Load ORGS DB v2 format (magic "ORGS", version 2)
+/// Same as v1 but with 8 strings per org (adds as_name as first field)
+fn load_orgs_db_v2(data: &[u8]) -> Result<OrgDb, String> {
+    if data.len() < 16 {
+        return Err("ORGS DB v2: file too small".into());
+    }
+
+    let org_count = u32::from_le_bytes(data[8..12].try_into().unwrap()) as usize;
+    let asn_count = u32::from_le_bytes(data[12..16].try_into().unwrap()) as usize;
+
+    let mut offset = 16;
+    let mut orgs: Vec<OrgDetails> = Vec::with_capacity(org_count);
+
+    for _ in 0..org_count {
+        let read_str = |data: &[u8], offset: &mut usize| -> Result<Option<String>, String> {
+            if *offset + 2 > data.len() {
+                return Err("ORGS DB v2: truncated reading length".into());
+            }
+            let len = u16::from_le_bytes(data[*offset..*offset + 2].try_into().unwrap()) as usize;
+            *offset += 2;
+            if len == 0 {
+                return Ok(None);
+            }
+            if *offset + len > data.len() {
+                return Err("ORGS DB v2: truncated reading string".into());
+            }
+            let s = String::from_utf8_lossy(&data[*offset..*offset + len]).to_string();
+            *offset += len;
+            Ok(Some(s))
+        };
+
+        let as_name = read_str(data, &mut offset)?;
+        let org_id = read_str(data, &mut offset)?;
+        let org_name = read_str(data, &mut offset)?;
+        let country = read_str(data, &mut offset)?;
+        let rir = read_str(data, &mut offset)?;
+        let org_type = read_str(data, &mut offset)?;
+        let abuse_contact = read_str(data, &mut offset)?;
+        let last_updated = read_str(data, &mut offset)?;
+
+        orgs.push(OrgDetails {
+            as_name,
+            org_id,
+            org_name,
+            country,
+            rir,
+            org_type,
+            abuse_contact,
+            last_updated,
+        });
+    }
+
+    let mut asn_to_org = HashMap::with_capacity(asn_count);
+    for _ in 0..asn_count {
+        if offset + 6 > data.len() {
+            return Err("ORGS DB v2: truncated reading ASN mapping".into());
         }
         let asn = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
         let idx = u16::from_le_bytes(data[offset + 4..offset + 6].try_into().unwrap());
@@ -579,9 +656,15 @@ impl FileAsnDb {
 
         let org = self.org_db.as_ref().and_then(|db| db.lookup(asn)).cloned();
 
+        // Prefer as_name from org DB (RIR data) over ip2asn if available
+        let final_as_name = org
+            .as_ref()
+            .and_then(|o| o.as_name.clone())
+            .unwrap_or_else(|| as_name.to_string());
+
         AsnInfo {
             asn,
-            as_name: as_name.to_string(),
+            as_name: final_as_name,
             prefix,
             rir: "ip2asn".into(),
             country: country_opt(country),
@@ -605,9 +688,15 @@ impl FileAsnDb {
 
         let org = self.org_db.as_ref().and_then(|db| db.lookup(asn)).cloned();
 
+        // Prefer as_name from org DB (RIR data) over ip2asn if available
+        let final_as_name = org
+            .as_ref()
+            .and_then(|o| o.as_name.clone())
+            .unwrap_or_else(|| as_name.to_string());
+
         AsnInfo {
             asn,
-            as_name: as_name.to_string(),
+            as_name: final_as_name,
             prefix,
             rir: "ip2asn".into(),
             country: country_opt(country),

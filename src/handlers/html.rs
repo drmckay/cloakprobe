@@ -249,6 +249,7 @@ mod tests {
                 rir: "ARIN".to_string(),
                 country: Some("US".to_string()),
                 org: Some(OrgDetails {
+                    as_name: Some("GOOGLE".to_string()),
                     org_id: Some("GOGL".to_string()),
                     org_name: Some("Google LLC".to_string()),
                     country: Some("US".to_string()),

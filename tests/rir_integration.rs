@@ -51,7 +51,7 @@ fn load_orgs_db(path: &str) -> Result<HashMap<u32, OrgRecord>, String> {
     }
 
     let version = u32::from_le_bytes(data[4..8].try_into().unwrap());
-    if version != 1 {
+    if version != 1 && version != 2 {
         return Err(format!("Unsupported version: {}", version));
     }
 
@@ -80,6 +80,12 @@ fn load_orgs_db(path: &str) -> Result<HashMap<u32, OrgRecord>, String> {
             Some(s)
         };
 
+        // Version 2 has as_name as first field
+        let as_name = if version >= 2 {
+            read_str(&data, &mut offset)
+        } else {
+            None
+        };
         let org_id = read_str(&data, &mut offset);
         let org_name = read_str(&data, &mut offset);
         let country = read_str(&data, &mut offset);
@@ -89,6 +95,7 @@ fn load_orgs_db(path: &str) -> Result<HashMap<u32, OrgRecord>, String> {
         let last_updated = read_str(&data, &mut offset);
 
         orgs.push(OrgRecord {
+            as_name,
             org_id,
             org_name,
             country,
@@ -120,6 +127,7 @@ fn load_orgs_db(path: &str) -> Result<HashMap<u32, OrgRecord>, String> {
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 struct OrgRecord {
+    as_name: Option<String>,
     org_id: Option<String>,
     org_name: Option<String>,
     country: Option<String>,
@@ -696,12 +704,12 @@ fn test_arin_xml_pipeline() {
 fn test_multi_rir_merge() {
     let dir = tempdir().unwrap();
 
-    // Create CSV data from multiple RIRs
-    let merged_csv = r#"3333,ORG-RNCC1-RIPE,RIPE NCC,NL,RIPE,RIR,,2024-01-01
-4608,ORG-APNIC1-AP,APNIC,AU,APNIC,RIR,,2024-01-01
-33762,ORG-AFRI1-AFRINIC,AFRINIC,MU,AFRINIC,RIR,,2024-01-01
-28000,ORG-LACNIC1-LACNIC,LACNIC,UY,LACNIC,RIR,,2024-01-01
-15169,GOGL,Google LLC,US,ARIN,HOSTING,abuse@google.com,2024-01-01
+    // Create CSV data from multiple RIRs (9 fields: asn,as_name,org_id,org_name,country,rir,org_type,abuse_contact,last_updated)
+    let merged_csv = r#"3333,RIPE-NCC-AS,ORG-RNCC1-RIPE,RIPE NCC,NL,RIPE,RIR,,2024-01-01
+4608,APNIC-AS,ORG-APNIC1-AP,APNIC,AU,APNIC,RIR,,2024-01-01
+33762,AFRINIC-AS,ORG-AFRI1-AFRINIC,AFRINIC,MU,AFRINIC,RIR,,2024-01-01
+28000,LACNIC-AS,ORG-LACNIC1-LACNIC,LACNIC,UY,LACNIC,RIR,,2024-01-01
+15169,GOOGLE,GOGL,Google LLC,US,ARIN,HOSTING,abuse@google.com,2024-01-01
 "#;
 
     let csv_path = dir.path().join("merged.csv");
@@ -804,8 +812,9 @@ fn test_empty_fields() {
     let dir = tempdir().unwrap();
 
     // Test with many empty fields (delegated stats fallback scenario)
-    let csv = r#"12345,,,,ARIN,,,2024-01-01
-67890,,,,RIPE,,,2024-02-01
+    // 9 fields: asn,as_name,org_id,org_name,country,rir,org_type,abuse_contact,last_updated
+    let csv = r#"12345,,,,,ARIN,,,2024-01-01
+67890,,,,,RIPE,,,2024-02-01
 "#;
 
     let csv_path = dir.path().join("empty.csv");
@@ -834,10 +843,10 @@ fn test_empty_fields() {
 fn test_asn_sorting() {
     let dir = tempdir().unwrap();
 
-    // CSV with unsorted ASNs
-    let csv = r#"99999,ORG-Z,Org Z,ZZ,TEST,,,
-11111,ORG-A,Org A,AA,TEST,,,
-55555,ORG-M,Org M,MM,TEST,,,
+    // CSV with unsorted ASNs (9 fields)
+    let csv = r#"99999,AS-Z,ORG-Z,Org Z,ZZ,TEST,,,
+11111,AS-A,ORG-A,Org A,AA,TEST,,,
+55555,AS-M,ORG-M,Org M,MM,TEST,,,
 "#;
 
     let csv_path = dir.path().join("unsorted.csv");
@@ -862,9 +871,12 @@ fn test_asn_sorting() {
     assert_eq!(asn_count, 3);
 
     // Skip org records to reach ASN mappings
+    // v2 format has 8 strings per org (as_name, org_id, org_name, country, rir, org_type, abuse_contact, last_updated)
+    let version = u32::from_le_bytes(data[4..8].try_into().unwrap());
+    let fields_per_org = if version >= 2 { 8 } else { 7 };
     let mut offset = 16;
     for _ in 0..org_count {
-        for _ in 0..7 {
+        for _ in 0..fields_per_org {
             let len = u16::from_le_bytes(data[offset..offset + 2].try_into().unwrap()) as usize;
             offset += 2 + len;
         }

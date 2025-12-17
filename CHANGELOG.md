@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- AS name (`as-name`) field extracted from RIR data for more accurate AS naming
+  - RPSL parser now extracts `as-name` field from aut-num objects
+  - Org DB v2 format stores `as_name` per organization record
+  - AS name from RIR data takes precedence over ip2asn (fixes truncated names like `ASN-VODAFONE-` → `ASN-VODAFONE-HU`)
+
+### Changed
 - Comprehensive handler tests for all endpoint handlers
   - Health handler tests (1 test)
   - Info handler tests (4 tests: basic, ASN data, nginx mode, invalid IP)
@@ -17,6 +23,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Total: 15 new handler tests, bringing total test count to 70
 
 ### Changed
+- Org DB format upgraded to v2 (adds `as_name` field, backward compatible reader for v1)
+- CSV format for org builders now includes 9 fields: `asn,as_name,org_id,org_name,country,rir,org_type,abuse_contact,last_updated`
+
+### Fixed
+- Fixed quick-xml 0.38 API compatibility (GeneralRef events for XML entity handling)
+- Fixed truncated AS names from iptoasn.com (e.g., AS21334 now shows `ASN-VODAFONE-HU` instead of `ASN-VODAFONE-`)
+
+### Previously Added
 - IP Address Details card UI improvements
   - IPv4 hexadecimal format changed from dotted notation (`C0.A8.01.01`) to 0x prefix format (`0xC0A80101`) without dots
   - Removed redundant `/24 Subnet` and `Subnet Size` rows from IPv4 details

@@ -6,7 +6,7 @@ use std::io::{BufReader, Read, Write};
 
 /// Unified RPSL parser for RIPE, APNIC, LACNIC, AFRINIC bulk data.
 ///
-/// Outputs CSV to stdout: asn,org_id,org_name,country,rir,org_type,abuse_contact,last_updated
+/// Outputs CSV to stdout: asn,as_name,org_id,org_name,country,rir,org_type,abuse_contact,last_updated
 ///
 /// Supports:
 ///   - Separate aut-num and organisation files (RIPE, APNIC)
@@ -88,6 +88,7 @@ fn run_with_args(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     for entry in &asn_entries {
         let org_details = entry.org_id.as_ref().and_then(|id| org_map.get(id));
 
+        let as_name = entry.as_name.clone().unwrap_or_default();
         let org_name = org_details
             .and_then(|o| o.org_name.clone())
             .unwrap_or_default();
@@ -112,8 +113,9 @@ fn run_with_args(args: Args) -> Result<(), Box<dyn std::error::Error>> {
 
         writeln!(
             out,
-            "{},{},{},{},{},{},{},{}",
+            "{},{},{},{},{},{},{},{},{}",
             entry.asn,
+            escape_csv(&as_name),
             escape_csv(&entry.org_id.clone().unwrap_or_default()),
             escape_csv(&org_name),
             escape_csv(&country),
@@ -169,6 +171,7 @@ struct OrgDetails {
 #[derive(Debug, Clone)]
 struct AutNumEntry {
     asn: u32,
+    as_name: Option<String>,
     org_id: Option<String>,
     country: Option<String>,
     abuse_c: Option<String>,
@@ -221,6 +224,7 @@ fn parse_organisations_extended(content: &str) -> HashMap<String, OrgDetails> {
 fn parse_aut_num_extended(content: &str) -> Vec<AutNumEntry> {
     let mut entries: Vec<AutNumEntry> = Vec::new();
     let mut current_asn: Option<u32> = None;
+    let mut current_as_name: Option<String> = None;
     let mut current_org_id: Option<String> = None;
     let mut current_country: Option<String> = None;
     let mut current_abuse_c: Option<String> = None;
@@ -239,6 +243,7 @@ fn parse_aut_num_extended(content: &str) -> Vec<AutNumEntry> {
             if let Some(asn) = current_asn.take() {
                 entries.push(AutNumEntry {
                     asn,
+                    as_name: current_as_name.take(),
                     org_id: current_org_id.take(),
                     country: current_country.take(),
                     abuse_c: current_abuse_c.take(),
@@ -246,12 +251,15 @@ fn parse_aut_num_extended(content: &str) -> Vec<AutNumEntry> {
                 });
             }
             current_asn = parse_asn_number(&extract_value(line, "aut-num:"));
+            current_as_name = None;
             current_org_id = None;
             current_country = None;
             current_abuse_c = None;
             current_last_modified = None;
         } else if current_asn.is_some() {
-            if line.starts_with("org:") {
+            if line.starts_with("as-name:") {
+                current_as_name = Some(extract_value(line, "as-name:"));
+            } else if line.starts_with("org:") {
                 current_org_id = Some(extract_value(line, "org:"));
             } else if line.starts_with("country:") {
                 current_country = Some(extract_value(line, "country:"));
@@ -267,6 +275,7 @@ fn parse_aut_num_extended(content: &str) -> Vec<AutNumEntry> {
     if let Some(asn) = current_asn {
         entries.push(AutNumEntry {
             asn,
+            as_name: current_as_name,
             org_id: current_org_id,
             country: current_country,
             abuse_c: current_abuse_c,

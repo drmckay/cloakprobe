@@ -8,7 +8,7 @@ use std::io::{BufReader, Write};
 
 /// ARIN XML bulk data parser.
 ///
-/// Outputs CSV to stdout: asn,org_id,org_name,country,rir,org_type,abuse_contact,last_updated
+/// Outputs CSV to stdout: asn,as_name,org_id,org_name,country,rir,org_type,abuse_contact,last_updated
 ///
 /// ARIN provides bulk data in XML format (requires registration):
 ///   - asns.xml: ASN allocations
@@ -78,10 +78,12 @@ fn run_with_args(args: Args) -> Result<(), Box<dyn std::error::Error>> {
 
         let last_updated = entry.update_date.clone().unwrap_or_default();
 
+        // ARIN doesn't have a separate as-name field, use org_name as as_name
         writeln!(
             out,
-            "{},{},{},{},ARIN,{},{},{}",
+            "{},{},{},{},{},ARIN,{},{},{}",
             entry.start_asn,
+            escape_csv(&org_name), // as_name (use org_name)
             escape_csv(&entry.org_handle.clone().unwrap_or_default()),
             escape_csv(&org_name),
             escape_csv(&country),
