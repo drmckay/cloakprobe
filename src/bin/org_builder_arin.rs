@@ -1,4 +1,5 @@
 use clap::Parser;
+use quick_xml::escape::unescape;
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
 use std::collections::HashMap;
@@ -155,7 +156,7 @@ fn parse_asns_xml(path: &str) -> Result<Vec<AsnEntry>, Box<dyn std::error::Error
             }
             Ok(Event::Text(e)) => {
                 if let Some(ref mut entry) = current_entry {
-                    let text = e.unescape()?.to_string();
+                    let text = unescape(&String::from_utf8_lossy(&e))?.to_string();
                     match current_element.as_str() {
                         "startAsNumber" => {
                             entry.start_asn = text.parse().unwrap_or(0);
@@ -223,7 +224,7 @@ fn parse_orgs_xml(path: &str) -> Result<HashMap<String, OrgEntry>, Box<dyn std::
             }
             Ok(Event::Text(e)) => {
                 if let Some(ref mut entry) = current_entry {
-                    let text = e.unescape()?.to_string();
+                    let text = unescape(&String::from_utf8_lossy(&e))?.to_string();
                     match current_element.as_str() {
                         "handle" => {
                             entry.handle = text;
@@ -290,7 +291,7 @@ fn parse_pocs_xml(path: &str) -> Result<HashMap<String, PocEntry>, Box<dyn std::
             }
             Ok(Event::Text(e)) => {
                 if let Some(ref mut entry) = current_entry {
-                    let text = e.unescape()?.to_string();
+                    let text = unescape(&String::from_utf8_lossy(&e))?.to_string();
                     match current_element.as_str() {
                         "handle" => {
                             entry.handle = text;
