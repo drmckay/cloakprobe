@@ -1,6 +1,6 @@
 [package]
 name = "cloakprobe"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 authors = ["Péter Veres"]
 license = "AGPL-3.0"
