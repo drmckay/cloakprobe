@@ -1,5 +1,5 @@
 use clap::Parser;
-use quick_xml::escape::unescape;
+use quick_xml::escape::{resolve_predefined_entity, unescape};
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
 use std::collections::HashMap;
@@ -165,12 +165,36 @@ fn parse_asns_xml(path: &str) -> Result<Vec<AsnEntry>, Box<dyn std::error::Error
                             entry.end_asn = text.parse().unwrap_or(0);
                         }
                         "orgHandle" => {
-                            entry.org_handle = Some(text);
+                            entry
+                                .org_handle
+                                .get_or_insert_with(String::new)
+                                .push_str(&text);
                         }
                         "updateDate" => {
-                            entry.update_date = Some(text);
+                            entry
+                                .update_date
+                                .get_or_insert_with(String::new)
+                                .push_str(&text);
                         }
                         _ => {}
+                    }
+                }
+            }
+            Ok(Event::GeneralRef(e)) => {
+                if let Some(ref mut entry) = current_entry {
+                    let entity_name = String::from_utf8_lossy(&e);
+                    if let Some(resolved) = resolve_predefined_entity(&entity_name) {
+                        match current_element.as_str() {
+                            "orgHandle" => entry
+                                .org_handle
+                                .get_or_insert_with(String::new)
+                                .push_str(resolved),
+                            "updateDate" => entry
+                                .update_date
+                                .get_or_insert_with(String::new)
+                                .push_str(resolved),
+                            _ => {}
+                        }
                     }
                 }
             }
@@ -227,21 +251,50 @@ fn parse_orgs_xml(path: &str) -> Result<HashMap<String, OrgEntry>, Box<dyn std::
                     let text = unescape(&String::from_utf8_lossy(&e))?.to_string();
                     match current_element.as_str() {
                         "handle" => {
-                            entry.handle = text;
+                            entry.handle.push_str(&text);
                         }
                         "name" => {
-                            entry.name = Some(text);
+                            entry.name.get_or_insert_with(String::new).push_str(&text);
                         }
                         "code2" if in_iso3166_1 => {
-                            entry.country = Some(text);
+                            entry
+                                .country
+                                .get_or_insert_with(String::new)
+                                .push_str(&text);
                         }
                         "orgTypeId" => {
-                            entry.org_type = Some(text);
+                            entry
+                                .org_type
+                                .get_or_insert_with(String::new)
+                                .push_str(&text);
                         }
                         "pocHandle" => {
                             entry.poc_handles.push(text);
                         }
                         _ => {}
+                    }
+                }
+            }
+            Ok(Event::GeneralRef(e)) => {
+                if let Some(ref mut entry) = current_entry {
+                    let entity_name = String::from_utf8_lossy(&e);
+                    if let Some(resolved) = resolve_predefined_entity(&entity_name) {
+                        match current_element.as_str() {
+                            "handle" => entry.handle.push_str(resolved),
+                            "name" => entry
+                                .name
+                                .get_or_insert_with(String::new)
+                                .push_str(resolved),
+                            "code2" if in_iso3166_1 => entry
+                                .country
+                                .get_or_insert_with(String::new)
+                                .push_str(resolved),
+                            "orgTypeId" => entry
+                                .org_type
+                                .get_or_insert_with(String::new)
+                                .push_str(resolved),
+                            _ => {}
+                        }
                     }
                 }
             }
@@ -294,15 +347,37 @@ fn parse_pocs_xml(path: &str) -> Result<HashMap<String, PocEntry>, Box<dyn std::
                     let text = unescape(&String::from_utf8_lossy(&e))?.to_string();
                     match current_element.as_str() {
                         "handle" => {
-                            entry.handle = text;
+                            entry.handle.push_str(&text);
                         }
                         "email" => {
-                            entry.email = Some(text);
+                            entry.email.get_or_insert_with(String::new).push_str(&text);
                         }
                         "contactType" => {
-                            entry.poc_type = Some(text);
+                            entry
+                                .poc_type
+                                .get_or_insert_with(String::new)
+                                .push_str(&text);
                         }
                         _ => {}
+                    }
+                }
+            }
+            Ok(Event::GeneralRef(e)) => {
+                if let Some(ref mut entry) = current_entry {
+                    let entity_name = String::from_utf8_lossy(&e);
+                    if let Some(resolved) = resolve_predefined_entity(&entity_name) {
+                        match current_element.as_str() {
+                            "handle" => entry.handle.push_str(resolved),
+                            "email" => entry
+                                .email
+                                .get_or_insert_with(String::new)
+                                .push_str(resolved),
+                            "contactType" => entry
+                                .poc_type
+                                .get_or_insert_with(String::new)
+                                .push_str(resolved),
+                            _ => {}
+                        }
                     }
                 }
             }
