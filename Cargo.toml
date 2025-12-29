@@ -25,7 +25,7 @@ thiserror = "2.0"
 chrono = { version = "0.4", features = ["clock", "serde"] }
 memmap2 = "0.9"
 tera = "1.19"
-tempfile = "3.12"
+tempfile = "3.24"
 flate2 = "1.0"
 quick-xml = "0.38"
 clap = { version = "4", features = ["derive"] }
