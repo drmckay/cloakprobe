@@ -27,7 +27,7 @@ memmap2 = "0.9"
 tera = "1.19"
 tempfile = "3.12"
 flate2 = "1.0"
-quick-xml = "0.38"
+quick-xml = "0.39"
 clap = { version = "4", features = ["derive"] }
 
 [profile.release]
