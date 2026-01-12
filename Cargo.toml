@@ -26,7 +26,7 @@ chrono = { version = "0.4", features = ["clock", "serde"] }
 memmap2 = "0.9"
 tera = "1.19"
 tempfile = "3.12"
-flate2 = "1.0"
+flate2 = "1.1"
 quick-xml = "0.38"
 clap = { version = "4", features = ["derive"] }
 
